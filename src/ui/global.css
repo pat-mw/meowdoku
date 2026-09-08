@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './fonts.css';
+
+@theme {
+  --font-sans: var(--mdk-font);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--mdk-bg);
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--mdk-font);
+  color: var(--mdk-ink-strong);
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Buttons inherit the rounded type rather than the UA default. */
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--mdk-ink);
+  outline-offset: 2px;
+}

@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<meta name="theme-color" content="#F5F0EB">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#F5F0EB;}
+a{color:#8A5A5A;} a:hover{color:#6B4A3A;}
+@keyframes mdkPop{0%{transform:scale(0);}70%{transform:scale(1.18);}100%{transform:scale(1);}}
+@keyframes mdkShake{0%,100%{transform:translateX(0);}15%{transform:translateX(-4px);}30%{transform:translateX(4px);}45%{transform:translateX(-4px);}60%{transform:translateX(4px);}80%{transform:translateX(-2px);}}
+@keyframes mdkFade{from{opacity:0;}to{opacity:1;}}
+@keyframes mdkRise{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
+@keyframes mdkConfetti{0%{transform:translateY(-8vh) rotate(0deg);opacity:1;}90%{opacity:1;}100%{transform:translateY(108vh) rotate(700deg);opacity:0;}}
+@keyframes mdkWobble{0%,100%{transform:rotate(0);}25%{transform:rotate(-14deg);}75%{transform:rotate(14deg);}}
+@keyframes mdkBounce{0%,100%{transform:scale(1);}45%{transform:scale(1.3);}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</helmet>
+<div style="font-family:'Nunito',ui-rounded,system-ui,sans-serif;min-height:100dvh;background:#F5F0EB;color:#6B4A3A;display:flex;flex-direction:column;align-items:center;-webkit-user-select:none;user-select:none;">
+<div style="width:100%;max-width:520px;min-height:100dvh;display:flex;flex-direction:column;padding:14px 14px 28px;box-sizing:border-box;">
+
+<sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+<svg viewBox="0 0 64 64" style="width:72px;height:72px;"><polygon points="10,28 14,6 30,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><polygon points="54,28 50,6 34,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><ellipse cx="32" cy="38" rx="25" ry="22" fill="#2E2B33"></ellipse><ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF"></ellipse><circle cx="21" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="43" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="22" cy="35" r="2.4" fill="#2E2B33"></circle><circle cx="42" cy="35" r="2.4" fill="#2E2B33"></circle><polygon points="32,43 28,39 36,39" fill="#E5828F"></polygon></svg>
+<div style="font-size:16px;font-weight:800;color:#B08A7A;">mew&hellip;</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHome }}">
+<section data-screen-label="Home" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;animation:mdkFade .25s;">
+<svg viewBox="0 0 64 64" style="width:128px;height:128px;filter:drop-shadow(0 8px 16px rgba(0,0,0,0.12));"><polygon points="10,28 14,6 30,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><polygon points="54,28 50,6 34,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><ellipse cx="32" cy="38" rx="25" ry="22" fill="#2E2B33"></ellipse><ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF"></ellipse><circle cx="21" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="43" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="22" cy="35" r="2.4" fill="#2E2B33"></circle><circle cx="42" cy="35" r="2.4" fill="#2E2B33"></circle><polygon points="32,43 28,39 36,39" fill="#E5828F"></polygon><path d="M32 43 Q29 48 25 46 M32 43 Q35 48 39 46" stroke="#2E2B33" stroke-width="2" fill="none" stroke-linecap="round"></path></svg>
+<h1 style="margin:6px 0 0;font-size:44px;font-weight:900;color:#8A5A5A;letter-spacing:-1px;">Meowdoku</h1>
+<div style="font-size:16px;font-weight:700;color:#B08A7A;margin-bottom:8px;">A cosy logic puzzle</div>
+<div style="background:#FFFFFF;border-radius:999px;padding:8px 20px;box-shadow:0 4px 16px rgba(0,0,0,0.06);font-size:14px;font-weight:800;display:flex;gap:6px;align-items:center;margin-bottom:14px;"><span style="color:#E8B93A;">&#9733;</span><span>{{ lifetimeScore }} points</span><span style="color:#D8C8BC;">&middot;</span><span>{{ completedCount }} solved</span></div>
+<button onClick="{{ onContinue }}" style="width:260px;height:56px;border:none;border-radius:28px;background:#8A5A5A;color:#FFF7F0;font-family:inherit;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(138,90,90,0.35);">{{ continueLabel }}</button>
+<button onClick="{{ goLevels }}" style="width:260px;height:52px;border:none;border-radius:26px;background:#FFFFFF;color:#8A5A5A;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.06);">Level select</button>
+<button onClick="{{ openSettings }}" style="width:260px;height:52px;border:none;border-radius:26px;background:#FFFFFF;color:#8A5A5A;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.06);">Settings</button>
+</section>
+</sc-if>
+
+<sc-if value="{{ isLevels }}">
+<section data-screen-label="Level select" style="display:flex;flex-direction:column;gap:16px;animation:mdkFade .25s;">
+<div style="display:flex;align-items:center;">
+<button onClick="{{ goHome }}" aria-label="Back" style="width:48px;height:48px;border-radius:50%;border:none;background:#FFFFFF;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg viewBox="0 0 32 32" style="width:24px;height:24px;"><path d="M26 16 H7 M14 8 L6 16 L14 24" stroke="#8A5A5A" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<div style="flex:1;text-align:center;font-size:24px;font-weight:900;color:#8A5A5A;">Levels</div>
+<button onClick="{{ openSettings }}" aria-label="Settings" style="width:48px;height:48px;border-radius:50%;border:none;background:#FFFFFF;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg viewBox="0 0 32 32" style="width:24px;height:24px;"><path d="M5 9 H27 M5 16 H27 M5 23 H27" stroke="#8A5A5A" stroke-width="3" stroke-linecap="round"></path><circle cx="12" cy="9" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle><circle cx="21" cy="16" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle><circle cx="10" cy="23" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle></svg></button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;">
+<sc-for list="{{ tiles }}" as="t" hint-placeholder-count="15">
+<button onClick="{{ t.onClick }}" aria-label="{{ t.aria }}" style="{{ t.style }}">
+<span style="font-size:18px;font-weight:900;line-height:1;">{{ t.num }}</span>
+<span style="font-size:10px;letter-spacing:1px;color:#E8B93A;height:12px;line-height:12px;">{{ t.stars }}</span>
+</button>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isGame }}">
+<section data-screen-label="Game" style="display:flex;flex-direction:column;gap:13px;animation:mdkFade .25s;">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+<button onClick="{{ backFromGame }}" aria-label="Back to home" style="width:48px;height:48px;border-radius:50%;border:none;background:#FFFFFF;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg viewBox="0 0 32 32" style="width:24px;height:24px;"><path d="M26 16 H7 M14 8 L6 16 L14 24" stroke="#8A5A5A" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<div style="display:flex;gap:38px;">
+<div style="text-align:center;"><div style="font-size:15px;font-weight:800;color:#B08A7A;">Level</div><div style="font-size:30px;font-weight:900;color:#8A5A5A;line-height:1.05;">{{ levelNum }}</div></div>
+<div style="text-align:center;"><div style="font-size:15px;font-weight:800;color:#B08A7A;">Score</div><div style="font-size:30px;font-weight:900;color:#8A5A5A;line-height:1.05;">{{ scoreNow }}</div></div>
+</div>
+<button onClick="{{ openSettings }}" aria-label="Settings" style="width:48px;height:48px;border-radius:50%;border:none;background:#FFFFFF;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg viewBox="0 0 32 32" style="width:24px;height:24px;"><path d="M5 9 H27 M5 16 H27 M5 23 H27" stroke="#8A5A5A" stroke-width="3" stroke-linecap="round"></path><circle cx="12" cy="9" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle><circle cx="21" cy="16" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle><circle cx="10" cy="23" r="3.6" fill="#8A5A5A" stroke="#FFFFFF" stroke-width="1.5"></circle></svg></button>
+</div>
+<div style="display:flex;justify-content:center;gap:12px;">
+<div style="background:#FFFFFF;border-radius:999px;padding:7px 18px;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;gap:8px;" aria-label="Cats placed">
+<svg viewBox="0 0 24 24" style="width:22px;height:22px;"><polygon points="3,10 5,2 11,6" fill="#2E2B33"></polygon><polygon points="21,10 19,2 13,6" fill="#2E2B33"></polygon><ellipse cx="12" cy="14" rx="9" ry="8" fill="#2E2B33"></ellipse><circle cx="8.5" cy="13" r="1.7" fill="#FFFFFF"></circle><circle cx="15.5" cy="13" r="1.7" fill="#FFFFFF"></circle><ellipse cx="12" cy="17.5" rx="3.6" ry="2.6" fill="#FFFFFF"></ellipse></svg>
+<span style="font-size:18px;font-weight:900;"><span style="color:#4E9A5F;">{{ catsPlaced }}</span><span style="color:#8A5A5A;">/{{ boardN }}</span></span>
+</div>
+<div style="background:#FFFFFF;border-radius:999px;padding:7px 16px;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;align-items:center;gap:5px;" aria-label="Lives">
+<sc-for list="{{ fish }}" as="f" hint-placeholder-count="3">
+<span style="{{ f.style }}"><svg viewBox="0 0 34 22" style="width:26px;height:17px;display:block;"><ellipse cx="13" cy="11" rx="11" ry="8" fill="#F2A05E"></ellipse><polygon points="22,11 33,3 33,19" fill="#E08A4A"></polygon><circle cx="8" cy="9" r="1.7" fill="#5A3A2A"></circle></svg></span>
+</sc-for>
+</div>
+</div>
+<div style="background:#FFFFFF;border-radius:18px;padding:10px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:flex;gap:10px;">
+<div style="flex:1;display:flex;align-items:center;gap:8px;">
+<div style="display:grid;grid-template-columns:repeat(3,9px);gap:2px;flex:none;">
+<sc-for list="{{ pict1 }}" as="pc" hint-placeholder-count="9"><div style="{{ pc.style }}"><sc-if value="{{ pc.x }}"><svg viewBox="0 0 10 10" style="width:6px;height:6px;"><path d="M2 2 L8 8 M8 2 L2 8" stroke="{{ pc.xc }}" stroke-width="2.2" stroke-linecap="round" fill="none"></path></svg></sc-if><sc-if value="{{ pc.cat }}"><svg viewBox="0 0 24 24" style="width:8px;height:8px;"><polygon points="3,10 5,2 11,6" fill="#4A3A35"></polygon><polygon points="21,10 19,2 13,6" fill="#4A3A35"></polygon><ellipse cx="12" cy="14" rx="9" ry="8" fill="#4A3A35"></ellipse><circle cx="8.5" cy="13" r="1.7" fill="#FFFFFF"></circle><circle cx="15.5" cy="13" r="1.7" fill="#FFFFFF"></circle></svg></sc-if></div></sc-for>
+</div>
+<div style="font-size:11px;font-weight:800;line-height:1.25;">1 cat per color</div>
+</div>
+<div style="flex:1;display:flex;align-items:center;gap:8px;">
+<div style="display:grid;grid-template-columns:repeat(3,9px);gap:2px;flex:none;">
+<sc-for list="{{ pict2 }}" as="pc" hint-placeholder-count="9"><div style="{{ pc.style }}"><sc-if value="{{ pc.x }}"><svg viewBox="0 0 10 10" style="width:6px;height:6px;"><path d="M2 2 L8 8 M8 2 L2 8" stroke="{{ pc.xc }}" stroke-width="2.2" stroke-linecap="round" fill="none"></path></svg></sc-if><sc-if value="{{ pc.cat }}"><svg viewBox="0 0 24 24" style="width:8px;height:8px;"><polygon points="3,10 5,2 11,6" fill="#4A3A35"></polygon><polygon points="21,10 19,2 13,6" fill="#4A3A35"></polygon><ellipse cx="12" cy="14" rx="9" ry="8" fill="#4A3A35"></ellipse><circle cx="8.5" cy="13" r="1.7" fill="#FFFFFF"></circle><circle cx="15.5" cy="13" r="1.7" fill="#FFFFFF"></circle></svg></sc-if></div></sc-for>
+</div>
+<div style="font-size:11px;font-weight:800;line-height:1.25;">1 cat per row &amp; column</div>
+</div>
+<div style="flex:1;display:flex;align-items:center;gap:8px;">
+<div style="display:grid;grid-template-columns:repeat(3,9px);gap:2px;flex:none;">
+<sc-for list="{{ pict3 }}" as="pc" hint-placeholder-count="9"><div style="{{ pc.style }}"><sc-if value="{{ pc.x }}"><svg viewBox="0 0 10 10" style="width:6px;height:6px;"><path d="M2 2 L8 8 M8 2 L2 8" stroke="{{ pc.xc }}" stroke-width="2.2" stroke-linecap="round" fill="none"></path></svg></sc-if><sc-if value="{{ pc.cat }}"><svg viewBox="0 0 24 24" style="width:8px;height:8px;"><polygon points="3,10 5,2 11,6" fill="#4A3A35"></polygon><polygon points="21,10 19,2 13,6" fill="#4A3A35"></polygon><ellipse cx="12" cy="14" rx="9" ry="8" fill="#4A3A35"></ellipse><circle cx="8.5" cy="13" r="1.7" fill="#FFFFFF"></circle><circle cx="15.5" cy="13" r="1.7" fill="#FFFFFF"></circle></svg></sc-if></div></sc-for>
+</div>
+<div style="font-size:11px;font-weight:800;line-height:1.25;">Cats cannot touch</div>
+</div>
+</div>
+<div style="background:#FFFFFF;border-radius:22px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+<div ref="{{ boardRef }}" style="{{ boardStyle }}">
+<sc-for list="{{ cells }}" as="c" hint-placeholder-count="25">
+<div role="button" aria-label="{{ c.aria }}" style="{{ c.style }}">
+<sc-if value="{{ c.mark }}"><svg viewBox="0 0 24 24" style="{{ c.markStyle }}"><path d="M6 6 L18 18 M18 6 L6 18" stroke="{{ c.markColor }}" stroke-width="3.4" stroke-linecap="round" fill="none"></path></svg></sc-if>
+<sc-if value="{{ c.cat }}"><span style="{{ c.catStyle }}"><svg viewBox="0 0 64 64" style="width:100%;height:100%;display:block;"><polygon points="10,28 14,6 30,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><polygon points="54,28 50,6 34,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><ellipse cx="32" cy="38" rx="25" ry="22" fill="#2E2B33"></ellipse><ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF"></ellipse><circle cx="21" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="43" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="22" cy="35" r="2.4" fill="#2E2B33"></circle><circle cx="42" cy="35" r="2.4" fill="#2E2B33"></circle><polygon points="32,43 28,39 36,39" fill="#E5828F"></polygon></svg></span></sc-if>
+<sc-if value="{{ c.letter }}"><span style="{{ c.letterStyle }}">{{ c.letter }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;justify-content:center;gap:46px;padding:4px 0;">
+<button onClick="{{ onReveal }}" aria-label="Reveal a cat" style="{{ revealBtnStyle }}">
+<svg viewBox="0 0 64 64" style="width:40px;height:40px;"><polygon points="10,28 14,6 30,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><polygon points="54,28 50,6 34,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><ellipse cx="32" cy="38" rx="25" ry="22" fill="#2E2B33"></ellipse><ellipse cx="32" cy="47" rx="16" ry="11" fill="#FFFFFF"></ellipse><circle cx="21" cy="34" r="5" fill="#FFFFFF"></circle><circle cx="22" cy="35" r="2.4" fill="#2E2B33"></circle><path d="M37 33 Q42 29 47 33" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round"></path><ellipse cx="32" cy="47" rx="4.5" ry="3.5" fill="#E5828F"></ellipse></svg>
+<span style="{{ badgeStyle }}">{{ revealsLeft }}</span>
+</button>
+<button onClick="{{ onHint }}" aria-label="Hint" style="{{ hintBtnStyle }}">
+<svg viewBox="0 0 36 44" style="width:30px;height:37px;"><circle cx="18" cy="16" r="13" fill="#F7CE46"></circle><circle cx="13" cy="12" r="3.5" fill="#FBE49A"></circle><path d="M12 28 h12 v5 a6 6 0 0 1 -12 0 z" fill="#9C8FB8"></path></svg>
+<span style="{{ badgeStyle }}">{{ hintsLeft }}</span>
+</button>
+</div>
+</section>
+</sc-if>
+
+</div>
+
+<sc-if value="{{ hintToast }}">
+<div style="position:fixed;left:50%;bottom:118px;transform:translateX(-50%);background:#FFFFFF;border-radius:16px;padding:10px 18px;box-shadow:0 8px 28px rgba(0,0,0,0.15);animation:mdkRise .25s;max-width:80vw;font-size:14px;font-weight:800;color:#6B4A3A;z-index:40;text-align:center;">{{ hintToast }}</div>
+</sc-if>
+
+<sc-if value="{{ showWin }}">
+<div style="position:fixed;inset:0;background:rgba(74,48,38,0.45);display:flex;align-items:center;justify-content:center;z-index:50;animation:mdkFade .25s;">
+<div data-screen-label="Win overlay" style="background:#FFFFFF;border-radius:24px;padding:26px 26px 20px;width:min(84vw,330px);text-align:center;animation:mdkRise .3s;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+<svg viewBox="0 0 64 64" style="width:72px;height:72px;animation:mdkBounce .6s;"><polygon points="10,28 14,6 30,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><polygon points="54,28 50,6 34,16" fill="#2E2B33" stroke="#2E2B33" stroke-width="6" stroke-linejoin="round"></polygon><ellipse cx="32" cy="38" rx="25" ry="22" fill="#2E2B33"></ellipse><ellipse cx="32" cy="47" rx="16" ry="11" fill="#FFFFFF"></ellipse><path d="M16 33 Q21 29 26 33 M38 33 Q43 29 48 33" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round"></path><ellipse cx="32" cy="47" rx="5" ry="4" fill="#E5828F"></ellipse></svg>
+<div style="font-size:32px;font-weight:900;color:#8A5A5A;margin:4px 0 0;">Purrfect!</div>
+<div style="font-size:28px;letter-spacing:5px;color:#E8B93A;margin:2px 0 10px;">{{ winStars }}</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:16px;">
+<sc-for list="{{ winLines }}" as="ln" hint-placeholder-count="2">
+<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;color:#8A6A5A;"><span>{{ ln.label }}</span><span>{{ ln.val }}</span></div>
+</sc-for>
+</div>
+<button onClick="{{ onNextLevel }}" style="width:100%;height:52px;border:none;border-radius:26px;background:#8A5A5A;color:#FFF7F0;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(138,90,90,0.35);">Next level</button>
+<button onClick="{{ overlayGoLevels }}" style="width:100%;height:44px;border:none;border-radius:22px;background:transparent;color:#B08A7A;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;margin-top:4px;">Level select</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showFail }}">
+<div style="position:fixed;inset:0;background:rgba(74,48,38,0.45);display:flex;align-items:center;justify-content:center;z-index:50;animation:mdkFade .25s;">
+<div data-screen-label="Fail overlay" style="background:#FFFFFF;border-radius:24px;padding:26px 26px 20px;width:min(84vw,330px);text-align:center;animation:mdkRise .3s;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+<span style="display:inline-block;filter:grayscale(1);opacity:0.5;animation:mdkWobble .6s;"><svg viewBox="0 0 34 22" style="width:64px;height:42px;"><ellipse cx="13" cy="11" rx="11" ry="8" fill="#F2A05E"></ellipse><polygon points="22,11 33,3 33,19" fill="#E08A4A"></polygon><circle cx="8" cy="9" r="1.7" fill="#5A3A2A"></circle></svg></span>
+<div style="font-size:28px;font-weight:900;color:#8A5A5A;margin:6px 0 2px;">Out of fish</div>
+<div style="font-size:14px;font-weight:700;color:#B08A7A;margin-bottom:18px;">Every cat deserves another try.</div>
+<button onClick="{{ onRetry }}" style="width:100%;height:52px;border:none;border-radius:26px;background:#8A5A5A;color:#FFF7F0;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(138,90,90,0.35);">Retry</button>
+<button onClick="{{ overlayGoLevels }}" style="width:100%;height:44px;border:none;border-radius:22px;background:transparent;color:#B08A7A;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;margin-top:4px;">Level select</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showSettings }}">
+<div onClick="{{ closeSettings }}" style="position:fixed;inset:0;background:rgba(74,48,38,0.45);display:flex;align-items:center;justify-content:center;z-index:55;animation:mdkFade .2s;">
+<div data-screen-label="Settings" onClick="{{ stopProp }}" style="background:#FFFFFF;border-radius:24px;padding:24px;width:min(86vw,340px);animation:mdkRise .25s;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+<div style="font-size:24px;font-weight:900;color:#8A5A5A;text-align:center;margin-bottom:14px;">Settings</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+<sc-for list="{{ settingRows }}" as="s" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+<span style="font-size:16px;font-weight:800;">{{ s.label }}</span>
+<button onClick="{{ s.toggle }}" aria-label="{{ s.aria }}" style="{{ s.trackStyle }}"><span style="{{ s.knobStyle }}"></span></button>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ showDanger }}"><button onClick="{{ onDanger }}" style="width:100%;height:44px;border:none;border-radius:22px;background:#FBEDE8;color:#C94F2E;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;">{{ dangerLabel }}</button></sc-if>
+<button onClick="{{ closeSettings }}" style="width:100%;height:48px;border:none;border-radius:24px;background:#8A5A5A;color:#FFF7F0;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;margin-top:8px;">Close</button>
+</div>
+</div>
+</sc-if>
+
+{{ confetti }}
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;cellRadius&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 18, &quot;min&quot;: 0, &quot;max&quot;: 40, &quot;step&quot;: 1, &quot;unit&quot;: &quot;%&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Board&quot;},
+  &quot;lives&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 3, &quot;min&quot;: 1, &quot;max&quot;: 5, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Rules&quot;},
+  &quot;reveals&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 2, &quot;min&quot;: 0, &quot;max&quot;: 9, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Rules&quot;},
+  &quot;hints&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 3, &quot;min&quot;: 0, &quot;max&quot;: 9, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Rules&quot;}
+}">
+class Component extends DCLogic {
+  state = { screen:'home', data:null, progress:null, g:null, showSettings:false, hintToast:null, hintCell:null, kb:null, boardW:340, winFx:false, resetArm:false };
+
+  componentDidMount(){
+    fetch('./levels.json').then(r=>r.json()).then(data=>{
+      let progress=null;
+      try{ progress=JSON.parse(localStorage.getItem('meowdoku:v1')); }catch(e){}
+      if(!progress||!progress.settings) progress=this.seedProgress(data);
+      if(!progress.settings.sndOn2){ progress={...progress,settings:{...progress.settings,sound:true,sndOn2:true}}; try{ localStorage.setItem('meowdoku:v1', JSON.stringify(progress)); }catch(e){} }
+      this.setState({data, progress});
+    });
+    this._key=(e)=>this.handleKey(e);
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount(){ window.removeEventListener('keydown', this._key); if(this._ro)this._ro.disconnect(); }
+
+  // First run: seed at the reference level (63) mid-game, matching the spec screenshot. Reset in Settings clears this.
+  seedProgress(data){
+    const completed={};
+    for(const lv of data.levels){ if(lv.number<63){ const stars=lv.number%6===0?2:3; const base=100*lv.size; completed[lv.id]={stars, score:stars===3?base:Math.round(base*0.9)}; } }
+    const n=11, cells=new Array(n*n).fill(0);
+    [0,1,2,3,4,5,10].forEach(c=>cells[c]=1); cells[1*n+8]=3;
+    const p={ currentLevel:63, completed, settings:{sound:true,sndOn2:true,haptics:true,colorBlind:false,autoX:false},
+      inProgress:{levelId:'0063', cells:cells.join(''), lives:2, reveals:2, hints:3, livesLost:1, powerUsed:0} };
+    try{ localStorage.setItem('meowdoku:v1', JSON.stringify(p)); }catch(e){}
+    return p;
+  }
+  persist(){
+    const {progress,g}=this.state; if(!progress)return;
+    const p={...progress};
+    if(g){ if(!g.over) p.inProgress={levelId:g.id, cells:g.cells.join(''), lives:g.lives, reveals:g.reveals, hints:g.hints, livesLost:g.livesLost, powerUsed:g.powerUsed};
+      else delete p.inProgress; }
+    try{ localStorage.setItem('meowdoku:v1', JSON.stringify(p)); }catch(e){}
+  }
+  setG(g){ this.setState({g}, ()=>this.persist()); }
+
+  levelByNumber(num){ return this.state.data.levels.find(l=>l.number===num); }
+  freshG(lv){
+    const lives=this.props.lives??3;
+    return { id:lv.id, num:lv.number, size:lv.size, regions:lv.regions, solution:lv.solution,
+      cells:new Array(lv.size*lv.size).fill(0), lives, maxLives:lives,
+      reveals:this.props.reveals??2, hints:this.props.hints??3, livesLost:0, powerUsed:0, over:null, lastCat:-1, lastWrong:-1 };
+  }
+  startLevel(num){
+    const lv=this.levelByNumber(num); if(!lv)return;
+    this._confettiNodes=null;
+    this.setState({screen:'game', g:this.freshG(lv), winFx:false, kb:null, hintToast:null, hintCell:null}, ()=>this.persist());
+  }
+  continueGame(){
+    const {progress,data}=this.state, ip=progress.inProgress;
+    if(ip){ const lv=data.levels.find(l=>l.id===ip.levelId);
+      if(lv){ const g=this.freshG(lv);
+        g.cells=ip.cells.split('').map(Number); g.lives=ip.lives; g.maxLives=Math.max(3,ip.lives);
+        g.reveals=ip.reveals; g.hints=ip.hints; g.livesLost=ip.livesLost; g.powerUsed=ip.powerUsed;
+        this._confettiNodes=null;
+        this.setState({screen:'game', g, winFx:false, kb:null, hintToast:null, hintCell:null}); return; } }
+    this.startLevel(progress.currentLevel);
+  }
+
+  cellIndexFromEvent(e){
+    const el=this.boardEl; if(!el||!this.state.g)return -1;
+    const rect=el.getBoundingClientRect(); const n=this.state.g.size;
+    const x=e.clientX-rect.left, y=e.clientY-rect.top;
+    if(x<0||y<0||x>=rect.width||y>=rect.height)return -1;
+    return Math.min(n-1,Math.floor(y/rect.height*n))*n + Math.min(n-1,Math.floor(x/rect.width*n));
+  }
+  boardRef = (el)=>{
+    if(!el||el===this.boardEl)return;
+    this.boardEl=el;
+    el.onpointerdown=this.pDown;
+    el.onpointermove=this.pMove;
+    el.onpointerup=this.pUp;
+    el.onpointercancel=this.pCancel;
+    if(this._ro)this._ro.disconnect();
+    this._ro=new ResizeObserver(en=>{ const w=en[0].contentRect.width; if(Math.abs(w-this.state.boardW)>0.5)this.setState({boardW:w}); });
+    this._ro.observe(el);
+  };
+  pDown = (e)=>{
+    const {g,showSettings}=this.state; if(!g||g.over||showSettings)return;
+    e.preventDefault();
+    const idx=this.cellIndexFromEvent(e); if(idx<0)return;
+    try{ this.boardEl.setPointerCapture(e.pointerId); }catch(err){}
+    const st=g.cells[idx];
+    this.ptr={id:e.pointerId, x:e.clientX, y:e.clientY, idx, startState:st, moved:false, consumed:false};
+    if(st===1){ this.ptr.lpt=setTimeout(()=>{ if(this.ptr&&!this.ptr.moved){ this.setCell(idx,0); this.ptr.consumed=true; this.buzz(12); } },350); }
+  };
+  pMove = (e)=>{
+    const p=this.ptr; if(!p||e.pointerId!==p.id)return;
+    if(!p.moved && Math.hypot(e.clientX-p.x,e.clientY-p.y)>6){
+      p.moved=true; clearTimeout(p.lpt);
+      if(p.startState===0){ p.painting=true; this.paint(p.idx); }
+    }
+    if(p.painting){ const idx=this.cellIndexFromEvent(e); if(idx>=0)this.paint(idx); }
+  };
+  pUp = (e)=>{
+    const p=this.ptr; if(!p||e.pointerId!==p.id)return;
+    clearTimeout(p.lpt); this.ptr=null;
+    if(p.consumed||p.moved)return;
+    this.tap(p.idx);
+  };
+  pCancel = (e)=>{ if(this.ptr){ clearTimeout(this.ptr.lpt); this.ptr=null; } };
+
+  paint(idx){
+    const g=this.state.g; if(!g||g.cells[idx]!==0)return;
+    this.setState(s=>{ const gg=s.g; if(!gg||gg.cells[idx]!==0)return null; const cells=gg.cells.slice(); cells[idx]=1; return {g:{...gg,cells}}; }, ()=>this.persist());
+    this.buzz(8); this.snd('tick');
+  }
+  setCell(idx,val){ this.setState(s=>{ const gg=s.g; if(!gg)return null; const cells=gg.cells.slice(); cells[idx]=val; return {g:{...gg,cells}}; }, ()=>this.persist()); }
+  tap(idx){
+    const g=this.state.g; if(!g||g.over)return;
+    const now=Date.now(), lt=this._lastTap;
+    this._lastTap={idx,t:now};
+    const st=g.cells[idx];
+    if(lt&&lt.idx===idx&&now-lt.t<300){ this._lastTap=null; if(st===0||st===1)this.attempt(idx); return; }
+    if(st===0){ this.setCell(idx,1); this.buzz(8); this.snd('tick'); }
+    else if(st===1){ this.setCell(idx,0); this.buzz(8); this.snd('untick'); }
+  }
+  attempt(idx){
+    const g=this.state.g, n=g.size, r=(idx/n)|0, c=idx%n;
+    const cells=g.cells.slice();
+    if(g.solution[r]===c){
+      cells[idx]=2;
+      const ng={...g,cells,lastCat:idx};
+      if(this.state.progress.settings.autoX) this.applyAutoX(ng,r,c);
+      this.snd('mew'); this.buzz(15);
+      if(ng.cells.filter(v=>v===2).length===n){ this.doWin(ng); return; }
+      this.setG(ng);
+    } else {
+      cells[idx]=3;
+      const ng={...g,cells,lives:g.lives-1,livesLost:g.livesLost+1,lastWrong:idx};
+      this.snd('bonk'); this.buzz([30,40,30]);
+      if(ng.lives<=0){ ng.over='failing'; this.setG(ng);
+        setTimeout(()=>{ const g2=this.state.g; if(g2&&g2.over==='failing'){ this.setG({...g2,over:'fail'}); this.snd('fail'); } },700);
+      } else this.setG(ng);
+    }
+  }
+  applyAutoX(g,r,c){
+    const n=g.size, reg=g.regions[r][c];
+    for(let i=0;i<n*n;i++){ if(g.cells[i]!==0)continue; const rr=(i/n)|0, cc=i%n;
+      if(rr===r||cc===c||g.regions[rr][cc]===reg||(Math.abs(rr-r)<=1&&Math.abs(cc-c)<=1)) g.cells[i]=1; }
+  }
+  doWin(g){
+    const n=g.size, base=100*n;
+    const pct=Math.max(0.2, 1-0.10*g.livesLost-0.15*g.powerUsed);
+    const score=Math.round(base*pct);
+    const stars=(g.livesLost===0&&g.powerUsed===0)?3:(g.livesLost<=1?2:1);
+    const ng={...g,over:'winning',score,stars};
+    const p={...this.state.progress};
+    const prev=p.completed[g.id]||{stars:0,score:0};
+    p.completed={...p.completed,[g.id]:{stars:Math.max(stars,prev.stars),score:Math.max(score,prev.score)}};
+    if(g.num>=p.currentLevel) p.currentLevel=Math.min(g.num+1, this.state.data.levels.length);
+    delete p.inProgress;
+    this._confettiNodes=null;
+    this.setState({g:ng,progress:p,winFx:true}, ()=>this.persist());
+    this.snd('win');
+    setTimeout(()=>{ const g2=this.state.g; if(g2&&g2.over==='winning')this.setState({g:{...g2,over:'win'}}); },1200);
+  }
+  reveal = ()=>{
+    const g=this.state.g; if(!g||g.over||g.reveals<=0)return;
+    const n=g.size; let idx=-1;
+    for(let r=0;r<n;r++){ const i=r*n+g.solution[r]; if(g.cells[i]!==2){ idx=i; break; } }
+    if(idx<0)return;
+    const cells=g.cells.slice(); cells[idx]=2;
+    const ng={...g,cells,reveals:g.reveals-1,powerUsed:g.powerUsed+1,lastCat:idx};
+    if(this.state.progress.settings.autoX) this.applyAutoX(ng,(idx/n)|0,idx%n);
+    this.snd('sparkle'); this.buzz(15);
+    if(ng.cells.filter(v=>v===2).length===n){ this.doWin(ng); return; }
+    this.setG(ng);
+  };
+  hint = ()=>{
+    const g=this.state.g; if(!g||g.over||g.hints<=0)return;
+    const res=this.findHint(g); if(!res)return;
+    const cells=g.cells.slice(); cells[res.idx]=1;
+    this.setState({g:{...g,cells,hints:g.hints-1,powerUsed:g.powerUsed+1}, hintToast:res.msg, hintCell:res.idx}, ()=>this.persist());
+    this.snd('pop'); this.buzz(10);
+    clearTimeout(this._toastT);
+    this._toastT=setTimeout(()=>this.setState({hintToast:null,hintCell:null}),3500);
+  };
+  findHint(g){
+    const n=g.size, names=this.state.data.names;
+    const cats=[]; for(let i=0;i<n*n;i++)if(g.cells[i]===2)cats.push(i);
+    for(const ci of cats){ const cr=(ci/n)|0, cc=ci%n;
+      for(let i=0;i<n*n;i++){ if(g.cells[i]!==0)continue; const r=(i/n)|0, c=i%n;
+        if(Math.abs(r-cr)<=1&&Math.abs(c-cc)<=1)return {idx:i,msg:'Cats can\u2019t touch \u2014 this cell borders a placed cat.'};
+        if(r===cr)return {idx:i,msg:'Row '+(r+1)+' already has its cat.'};
+        if(c===cc)return {idx:i,msg:'This column already has its cat.'};
+        if(g.regions[r][c]===g.regions[cr][cc])return {idx:i,msg:'The '+(names[g.regions[cr][cc]]||'')+' region already has its cat.'};
+      } }
+    const open=(i,extra)=>{
+      if(g.cells[i]===3)return false; const r=(i/n)|0, c=i%n;
+      const list=extra>=0?cats.concat([extra]):cats;
+      for(const ci of list){ if(i===ci)return false; const cr=(ci/n)|0, cc=ci%n;
+        if(r===cr||c===cc)return false;
+        if(Math.abs(r-cr)<=1&&Math.abs(c-cc)<=1)return false; }
+      return true; };
+    const regCells={};
+    for(let i=0;i<n*n;i++){ const k=g.regions[(i/n)|0][i%n]; (regCells[k]=regCells[k]||[]).push(i); }
+    for(let e=0;e<n*n;e++){
+      if(g.cells[e]!==0||!open(e,-1))continue;
+      const er=(e/n)|0, ec=e%n;
+      for(let r=0;r<n;r++){ if(r===er)continue; if(cats.some(ci=>((ci/n)|0)===r))continue;
+        let any=false; for(let c=0;c<n;c++){ if(open(r*n+c,e)){any=true;break;} }
+        if(!any)return {idx:e,msg:'A cat here would leave row '+(r+1)+' with nowhere for its cat.'}; }
+      const eKey=g.regions[er][ec];
+      for(const k in regCells){ if(k===eKey)continue;
+        if(cats.some(ci=>g.regions[(ci/n)|0][ci%n]===k))continue;
+        if(!regCells[k].some(i=>open(i,e)))return {idx:e,msg:'A cat here would squeeze the '+(names[k]||k)+' region out.'}; }
+    }
+    for(let i=0;i<n*n;i++){ if(g.cells[i]===0&&g.solution[(i/n)|0]!==i%n)return {idx:i,msg:'No cat can live here \u2014 safe to mark it off.'}; }
+    return null;
+  }
+
+  snd(kind){
+    const p=this.state.progress; if(!p||!p.settings.sound)return;
+    try{
+      const ctx=this._ac=this._ac||new (window.AudioContext||window.webkitAudioContext)();
+      if(ctx.state==='suspended')ctx.resume();
+      const note=(f0,f1,t0,dur,type,vol)=>{
+        const o=ctx.createOscillator(), gn=ctx.createGain(); o.connect(gn); gn.connect(ctx.destination);
+        const t=ctx.currentTime+t0; o.type=type;
+        o.frequency.setValueAtTime(f0,t);
+        if(f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+dur*0.8);
+        gn.gain.setValueAtTime(0.0001,t); gn.gain.exponentialRampToValueAtTime(vol,t+0.015); gn.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        o.start(t); o.stop(t+dur+0.03);
+      };
+      if(kind==='tick')note(1250,1250,0,0.05,'square',0.045);
+      else if(kind==='untick')note(700,700,0,0.05,'square',0.04);
+      else if(kind==='mew'){ note(620,980,0,0.12,'sine',0.16); note(980,540,0.12,0.16,'sine',0.14); }
+      else if(kind==='bonk')note(170,85,0,0.18,'triangle',0.22);
+      else if(kind==='pop')note(400,900,0,0.09,'sine',0.12);
+      else if(kind==='sparkle'){ note(880,880,0,0.08,'sine',0.1); note(1320,1320,0.09,0.1,'sine',0.1); }
+      else if(kind==='win'){ [523,659,784,1047].forEach((f,i)=>note(f,f,i*0.12,0.22,'sine',0.14)); }
+      else if(kind==='fail'){ note(330,330,0,0.2,'sine',0.14); note(220,220,0.22,0.3,'sine',0.14); }
+    }catch(e){}
+  }
+  buzz(pat){ const p=this.state.progress; if(p&&p.settings.haptics&&navigator.vibrate)try{navigator.vibrate(pat);}catch(e){} }
+
+  handleKey(e){
+    const {screen,g,showSettings}=this.state;
+    if(e.key==='Escape'&&showSettings){ this.setState({showSettings:false}); return; }
+    if(screen!=='game'||!g||g.over||showSettings)return;
+    const n=g.size; const k=e.key;
+    if(k==='ArrowUp'||k==='ArrowDown'||k==='ArrowLeft'||k==='ArrowRight'){
+      e.preventDefault();
+      let kb=this.state.kb?{...this.state.kb}:{r:0,c:0,fresh:true};
+      if(!kb.fresh){
+        if(k==='ArrowUp')kb.r=Math.max(0,kb.r-1);
+        if(k==='ArrowDown')kb.r=Math.min(n-1,kb.r+1);
+        if(k==='ArrowLeft')kb.c=Math.max(0,kb.c-1);
+        if(k==='ArrowRight')kb.c=Math.min(n-1,kb.c+1);
+      } else kb.fresh=false;
+      this.setState({kb}); return;
+    }
+    if(!this.state.kb)return;
+    const kb=this.state.kb, idx=kb.r*n+kb.c, st=g.cells[idx];
+    if(k==='x'||k==='X'){ if(st===0){this.setCell(idx,1);this.snd('tick');} else if(st===1)this.setCell(idx,0); }
+    else if(k==='Enter'||k===' '){ e.preventDefault(); if(st===0||st===1)this.attempt(idx); }
+    else if(k==='Backspace'||k==='Delete'){ if(st===1)this.setCell(idx,0); }
+  }
+
+  toggleSetting(key){
+    const p={...this.state.progress}; p.settings={...p.settings,[key]:!p.settings[key]};
+    this.setState({progress:p}, ()=>this.persist());
+  }
+  resetTap = ()=>{
+    if(!this.state.resetArm){ this.setState({resetArm:true}); clearTimeout(this._raT); this._raT=setTimeout(()=>this.setState({resetArm:false}),2500); return; }
+    const fresh={currentLevel:1,completed:{},settings:{sound:true,sndOn2:true,haptics:true,colorBlind:false,autoX:false}};
+    try{ localStorage.setItem('meowdoku:v1', JSON.stringify(fresh)); }catch(e){}
+    this.setState({progress:fresh, g:null, screen:'home', showSettings:false, resetArm:false, winFx:false});
+  };
+
+  renderVals(){
+    const {data,progress,screen,g,showSettings,boardW,winFx,hintToast,hintCell,kb,resetArm}=this.state;
+    const vals={ loading:!data||!progress, isHome:false, isLevels:false, isGame:false,
+      showSettings:false, showWin:false, showFail:false, hintToast:null, confetti:null };
+    if(vals.loading)return vals;
+    const pal=data.palette, names=data.names;
+    vals.isHome=screen==='home'; vals.isLevels=screen==='levels'; vals.isGame=screen==='game'&&!!g;
+    vals.showSettings=showSettings;
+    vals.stopProp=(e)=>e.stopPropagation();
+    vals.goHome=()=>this.setState({screen:'home'});
+    vals.goLevels=()=>this.setState({screen:'levels'});
+    vals.openSettings=()=>this.setState({showSettings:true,resetArm:false});
+    vals.closeSettings=()=>this.setState({showSettings:false});
+    vals.onContinue=()=>this.continueGame();
+    vals.backFromGame=()=>this.setState({screen:'home'});
+    vals.continueLabel=(progress.inProgress?'Continue':'Play')+' \u2014 Level '+progress.currentLevel;
+    let lifetime=0, done=0;
+    for(const id in progress.completed){ lifetime+=progress.completed[id].score; done++; }
+    vals.lifetimeScore=lifetime.toLocaleString('en-US'); vals.completedCount=done;
+    vals.tiles=data.levels.map(lv=>{
+      const comp=progress.completed[lv.id];
+      const unlocked=lv.number<=progress.currentLevel;
+      const cur=lv.number===progress.currentLevel;
+      return {
+        num:lv.number,
+        stars:comp?'\u2605'.repeat(comp.stars):'',
+        aria:'Level '+lv.number+(unlocked?'':', locked'),
+        onClick:unlocked?()=>{ if(cur&&progress.inProgress)this.continueGame(); else this.startLevel(lv.number); }:()=>{},
+        style:{ aspectRatio:'1', border:'none', borderRadius:'16px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'2px',
+          fontFamily:'inherit', cursor:unlocked?'pointer':'default', padding:'0',
+          background:unlocked?'#FFFFFF':'#EDE4DA', color:unlocked?'#8A5A5A':'#C7B7A6',
+          boxShadow:unlocked?'0 4px 16px rgba(0,0,0,0.06)':'none',
+          outline:cur?'3px solid #8A5A5A':'none', outlineOffset:'-3px' }
+      };
+    });
+    const tan='#EAD8C2', brown='#8A6A50';
+    const mk=(bgs,glyphs,xc)=>bgs.map((bg,i)=>({ style:{width:'9px',height:'9px',borderRadius:'2.5px',background:bg,display:'flex',alignItems:'center',justifyContent:'center'}, x:glyphs[i]==='x', cat:glyphs[i]==='c', xc:glyphs[i]==='x'?xc:'#FFFFFF' }));
+    vals.pict1=mk(['#F2A66E','#F2A66E','#F2DE8C','#F2A66E','#F2A66E','#F2DE8C','#F2DE8C','#F2DE8C','#F2DE8C'],['c','x',null,'x','x',null,null,null,null],'#FFFFFF');
+    vals.pict2=mk(Array(9).fill(tan),['c','x','x','x',null,null,'x',null,null],brown);
+    vals.pict3=mk(Array(9).fill(tan),['x','x','x','x','c','x','x','x','x'],brown);
+    const s=progress.settings;
+    vals.settingRows=[['sound','Sound'],['haptics','Haptics'],['colorBlind','Colour-blind letters'],['autoX','Auto-X after a cat']].map(([k,label])=>({
+      label, aria:label+(s[k]?' on':' off'), toggle:()=>this.toggleSetting(k),
+      trackStyle:{width:'52px',height:'30px',borderRadius:'15px',border:'none',padding:'3px',display:'flex',justifyContent:s[k]?'flex-end':'flex-start',alignItems:'center',background:s[k]?'#4E9A5F':'#DCD2C6',cursor:'pointer',transition:'background .2s',boxSizing:'border-box'},
+      knobStyle:{width:'24px',height:'24px',borderRadius:'50%',background:'#FFFFFF',boxShadow:'0 1px 3px rgba(0,0,0,0.25)',display:'block'}
+    }));
+    if(screen==='levels'){ vals.showDanger=true; vals.dangerLabel=resetArm?'Tap again to confirm':'Reset progress'; vals.onDanger=this.resetTap; }
+    else if(screen==='game'&&g){ vals.showDanger=true; vals.dangerLabel='Restart level'; vals.onDanger=()=>{ this.setState({showSettings:false}); this.startLevel(g.num); }; }
+    else { vals.showDanger=false; }
+    if(g){
+      const n=g.size;
+      vals.levelNum=g.num; vals.boardN=n;
+      const cats=g.cells.reduce((a,v)=>a+(v===2?1:0),0);
+      vals.catsPlaced=cats;
+      const base=100*n, pct=Math.max(0.2,1-0.1*g.livesLost-0.15*g.powerUsed);
+      vals.scoreNow=(g.over==='win'||g.over==='winning')?g.score:Math.round(base*pct*cats/n);
+      vals.fish=Array.from({length:g.maxLives},(_,i)=>({ style:{ opacity:i<g.lives?1:0.32, filter:i<g.lives?'none':'grayscale(1)', display:'inline-flex', transition:'opacity .4s, filter .4s', animation:(g.over==='failing')?'mdkWobble .5s ease':'none' } }));
+      const gap=Math.max(2,Math.round((boardW/n)*0.09));
+      const cellPx=(boardW-gap*(n-1))/n;
+      vals.boardStyle={display:'grid',gridTemplateColumns:'repeat('+n+', minmax(0,1fr))',gap:gap+'px',touchAction:'none',cursor:'pointer'};
+      vals.boardRef=this.boardRef;
+      const radius=(this.props.cellRadius??18);
+      const cbMode=s.colorBlind;
+      const dim=g.over==='failing'||g.over==='fail';
+      let catSeq=0;
+      vals.cells=[];
+      for(let i=0;i<n*n;i++){
+        const r=(i/n)|0, c=i%n, key=g.regions[r][c], st=g.cells[i];
+        const isCat=st===2, isX=st===1, isWrong=st===3;
+        let anim='none';
+        if(isWrong&&i===g.lastWrong)anim='mdkShake .28s';
+        if(winFx&&isCat){ anim='mdkBounce .5s ease '+(catSeq*0.07)+'s'; }
+        if(isCat)catSeq++;
+        const kbHere=kb&&!kb.fresh===false&&kb.r===r&&kb.c===c;
+        vals.cells.push({
+          style:{ position:'relative', aspectRatio:'1', background:pal[key], borderRadius:radius+'%',
+            display:'flex', alignItems:'center', justifyContent:'center', animation:anim,
+            boxShadow:(kb&&kb.r===r&&kb.c===c)?'inset 0 0 0 3px #4A3A35':(i===hintCell?'0 0 0 3px #E8B93A':'none'),
+            opacity:dim?0.55:1, transition:'opacity .4s' },
+          mark:isX||isWrong,
+          markColor:isWrong?'#E5613D':'#FFFFFF',
+          markStyle:{width:'55%',height:'55%',display:'block',animation:isX?'mdkFade .12s':'none'},
+          cat:isCat,
+          catStyle:{width:'80%',height:'80%',display:'block',animation:(i===g.lastCat&&!winFx)?'mdkPop .2s ease-out':'none'},
+          letter:(cbMode&&!isCat)?key:null,
+          letterStyle:{position:'absolute',top:'4%',left:'10%',fontSize:Math.max(8,cellPx*0.26)+'px',fontWeight:900,color:'rgba(58,40,32,0.4)',lineHeight:1.2},
+          aria:'Row '+(r+1)+', column '+(c+1)+', '+(names[key]||key)+', '+(isCat?'cat':isX?'marked not a cat':isWrong?'wrong guess':'empty')
+        });
+      }
+      vals.revealsLeft=g.reveals; vals.hintsLeft=g.hints;
+      const btn=(en)=>({position:'relative',width:'64px',height:'64px',borderRadius:'50%',border:'none',background:'#FFFFFF',boxShadow:'0 4px 16px rgba(0,0,0,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:en?'pointer':'default',opacity:en?1:0.45,fontFamily:'inherit'});
+      vals.revealBtnStyle=btn(g.reveals>0&&!g.over);
+      vals.hintBtnStyle=btn(g.hints>0&&!g.over);
+      vals.badgeStyle={position:'absolute',top:'-4px',right:'-4px',minWidth:'22px',height:'22px',borderRadius:'11px',background:'#E5613D',color:'#FFFFFF',fontSize:'13px',fontWeight:900,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px',boxSizing:'border-box'};
+      vals.onReveal=this.reveal; vals.onHint=this.hint;
+      vals.showWin=g.over==='win'; vals.showFail=g.over==='fail';
+      if(vals.showWin){
+        vals.winStars='\u2605'.repeat(g.stars)+'\u2606'.repeat(3-g.stars);
+        vals.winLines=[{label:'Base ('+n+' cats)',val:'+'+(100*n)}];
+        if(g.livesLost)vals.winLines.push({label:'Fish lost \u00d7'+g.livesLost,val:'\u2212'+(g.livesLost*10)+'%'});
+        if(g.powerUsed)vals.winLines.push({label:'Power-ups \u00d7'+g.powerUsed,val:'\u2212'+(g.powerUsed*15)+'%'});
+        vals.winLines.push({label:'Score',val:String(g.score)});
+        vals.onNextLevel=()=>{ const next=g.num+1; if(this.levelByNumber(next))this.startLevel(next); else this.setState({screen:'levels',g:null}); };
+      }
+      vals.onRetry=()=>this.startLevel(g.num);
+      vals.overlayGoLevels=()=>this.setState({screen:'levels',g:null,winFx:false});
+      if(winFx){
+        if(!this._confettiNodes){
+          const colors=Object.values(pal);
+          this._confettiNodes=React.createElement('div',{style:{position:'fixed',inset:0,pointerEvents:'none',zIndex:60,overflow:'hidden'}},
+            Array.from({length:26},(_,i)=>React.createElement('div',{key:i,style:{position:'absolute',left:(Math.random()*100)+'%',top:'-5vh',width:'10px',height:'14px',borderRadius:'3px',background:colors[i%colors.length],opacity:0,animation:'mdkConfetti '+(1.4+Math.random()*0.9).toFixed(2)+'s linear '+(Math.random()*0.4).toFixed(2)+'s forwards'}})));
+        }
+        vals.confetti=this._confettiNodes;
+      } else this._confettiNodes=null;
+      vals.hintToast=hintToast;
+    }
+    return vals;
+  }
+}
+</script>
+</body>
+</html>

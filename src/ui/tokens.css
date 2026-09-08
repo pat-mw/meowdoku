@@ -1,0 +1,121 @@
+/* Design tokens for Meowdoku.
+   Colour names and hex values are lifted from the Claude Design export's palette
+   so the shipped game matches the approved visual language exactly. */
+
+:root {
+  /* Surfaces */
+  --mdk-bg: #f5f0eb;
+  --mdk-card: #ffffff;
+  --mdk-card-locked: #ede4da;
+  --mdk-scrim: rgba(74, 48, 38, 0.45);
+
+  /* Ink */
+  --mdk-ink: #8a5a5a;
+  --mdk-ink-strong: #6b4a3a;
+  --mdk-ink-muted: #b08a7a;
+  --mdk-ink-faint: #d8c8bc;
+  --mdk-ink-locked: #c7b7a6;
+  --mdk-ink-pictogram: #4a3a35;
+
+  /* Accents */
+  --mdk-gold: #e8b93a;
+  --mdk-green: #4e9a5f;
+  --mdk-coral: #e5613d;
+  --mdk-danger-bg: #fbede8;
+  --mdk-danger-ink: #c94f2e;
+  --mdk-toggle-off: #dcd2c6;
+
+  /* Mascots */
+  --mdk-cat-body: #2e2b33;
+  --mdk-cat-nose: #e5828f;
+  --mdk-fish-body: #f2a05e;
+  --mdk-fish-tail: #e08a4a;
+  --mdk-fish-eye: #5a3a2a;
+
+  /* Pictogram chips in the rules strip */
+  --mdk-pict-tan: #ead8c2;
+  --mdk-pict-brown: #8a6a50;
+
+  /* Elevation */
+  --mdk-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --mdk-shadow-button: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --mdk-shadow-primary: 0 6px 20px rgba(138, 90, 90, 0.35);
+  --mdk-shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.2);
+  --mdk-shadow-toast: 0 8px 28px rgba(0, 0, 0, 0.15);
+  --mdk-shadow-logo: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12));
+
+  /* Geometry */
+  --mdk-radius-card: 22px;
+  --mdk-radius-panel: 18px;
+  --mdk-radius-overlay: 24px;
+  --mdk-radius-tile: 16px;
+  --mdk-cell-radius: 18%;
+  --mdk-app-max-width: 520px;
+
+  /* Type */
+  --mdk-font: 'Nunito', ui-rounded, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Region palette — 17 keys, so a 15x15 board always has two spares. */
+  --mdk-region-O: #f2a66e;
+  --mdk-region-G: #4e9a5f;
+  --mdk-region-Y: #d3b23b;
+  --mdk-region-B: #b8d2ee;
+  --mdk-region-T: #4fafb8;
+  --mdk-region-P: #efa6e4;
+  --mdk-region-L: #f2de8c;
+  --mdk-region-R: #9c6f49;
+  --mdk-region-M: #a6d98a;
+  --mdk-region-U: #8c7fe0;
+  --mdk-region-K: #cb6f98;
+  --mdk-region-V: #c9a8f0;
+  --mdk-region-N: #f6c08b;
+  --mdk-region-W: #7fa3d9;
+  --mdk-region-S: #b7bf55;
+  --mdk-region-C: #8fd8cf;
+  --mdk-region-F: #6fbf87;
+}
+
+@keyframes mdkPop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+@keyframes mdkShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px); }
+  30% { transform: translateX(4px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+@keyframes mdkFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mdkRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes mdkConfetti {
+  0% { transform: translateY(-8vh) rotate(0deg); opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(108vh) rotate(700deg); opacity: 0; }
+}
+@keyframes mdkWobble {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-14deg); }
+  75% { transform: rotate(14deg); }
+}
+@keyframes mdkBounce {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
