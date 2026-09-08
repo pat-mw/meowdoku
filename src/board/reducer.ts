@@ -69,7 +69,7 @@ export type GameAction =
   | { type: 'tap'; index: CellIndex }
   | { type: 'doubleTap'; index: CellIndex }
   | { type: 'longPress'; index: CellIndex }
-  | { type: 'paint'; indices: readonly CellIndex[] }
+  | { type: 'paint'; indices: readonly CellIndex[]; mode: 'mark' | 'erase' }
   | { type: 'reveal' }
   | { type: 'hint'; index: CellIndex; message: string }
   | { type: 'dismissHint' }
@@ -312,16 +312,30 @@ const firstUnsolvedRow = (state: GameState): number => {
   return -1
 }
 
-const paint = (state: GameState, indices: readonly CellIndex[]): GameState => {
+/**
+ * A drag stroke, in one direction or the other.
+ *
+ * Which one is decided by the cell the stroke began on and fixed for its whole
+ * length: a drag from an empty cell marks, a drag from a marked cell erases.
+ * Cats and wrong guesses are locked and a stroke never touches them, so a drag
+ * can be swept across the board without any risk of undoing real progress.
+ */
+const paint = (
+  state: GameState,
+  indices: readonly CellIndex[],
+  mode: 'mark' | 'erase',
+): GameState => {
+  const from = mode === 'mark' ? CellState.Empty : CellState.X
+  const to = mode === 'mark' ? CellState.X : CellState.Empty
   let cells: CellState[] | null = null
   for (const index of indices) {
     if (!inBounds(state, index)) continue
-    if ((cells ?? state.cells)[index] !== CellState.Empty) continue
+    if ((cells ?? state.cells)[index] !== from) continue
     cells ??= state.cells.slice()
-    cells[index] = CellState.X
+    cells[index] = to
   }
   if (cells === null) return state
-  return stamped(state, { cells }, 'tick')
+  return stamped(state, { cells }, mode === 'mark' ? 'tick' : 'untick')
 }
 
 const reveal = (state: GameState): GameState => {
@@ -399,7 +413,7 @@ export const reduce = (state: GameState, action: GameAction): GameState => {
       return stamped(state, { cells }, 'untick')
     }
     case 'paint':
-      return paint(state, action.indices)
+      return paint(state, action.indices, action.mode)
     case 'reveal':
       return reveal(state)
     case 'hint':

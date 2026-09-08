@@ -47,8 +47,9 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
   }, [levelNumber, openLevel])
 
   const onGesture = (gesture: BoardGesture) => {
-    if (gesture.type === 'paint') dispatch({ type: 'paint', indices: gesture.indices })
-    else dispatch({ type: gesture.type, index: gesture.index })
+    if (gesture.type === 'paint') {
+      dispatch({ type: 'paint', indices: gesture.indices, mode: gesture.mode })
+    } else dispatch({ type: gesture.type, index: gesture.index })
   }
 
   const interactive = game !== null && game.status === 'playing' && !showSettings

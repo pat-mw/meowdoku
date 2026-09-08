@@ -1,0 +1,20 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`determinism > keeps levels 1 to 50 byte-for-byte stable 1`] = `"0345d368 7b3ac40b 13e80578 0df7ab71 e4783628 3522f349 951c96d6 cdf07784 987ebd3f aed0d5dd e2cd9b5b 10c678e2 d73103d3 2a3363f2 617fb2cd fcc1e216 aaef6322 f4bd6c7c 55761851 8503ab52 3c92b5bd 41572353 241aaf13 f3e6ed97 6856ff17 f4880daa 13426462 9020c49f 4c2ea94d 3a1e1236 384b50d1 c13a3890 8da8d70e df4a061b f368040a bc43dd40 45d72240 15d86b8b 5e7c06e2 1e34461d 27ed7607 61c32d7c 5af0906c dcdcb324 471355a6 33a5c504 54a94191 6b258cec b34666cb 9ece527d"`;
+
+exports[`determinism > matches the recorded fingerprints for its landmark levels 1`] = `
+{
+  "1": "0345d368",
+  "10": "aed0d5dd",
+  "100": "d0b433bf",
+  "1000": "adef64be",
+  "11": "e2cd9b5b",
+  "2": "7b3ac40b",
+  "25": "6856ff17",
+  "26": "f4880daa",
+  "3": "13e80578",
+  "50": "9ece527d",
+  "500": "7a27b7e9",
+  "5000": "4f64bf5f",
+}
+`;

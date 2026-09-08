@@ -176,6 +176,7 @@ describe('paint', () => {
   it('marks every empty cell of the stroke in one go', () => {
     const state = reduce(createGame(SAMPLE_LEVEL), {
       type: 'paint',
+      mode: 'mark',
       indices: [at(6, 0), at(6, 1), at(6, 2)],
     })
     expect(state.cells[at(6, 0)]).toBe(CellState.X)
@@ -187,17 +188,55 @@ describe('paint', () => {
 
   it('never changes an x, a cat or a wrong guess', () => {
     const board = mixedBoard()
-    const state = reduce(board, { type: 'paint', indices: [CAT, WRONG, MARKED, BLANK] })
+    const state = reduce(board, {
+      type: 'paint',
+      indices: [CAT, WRONG, MARKED, BLANK],
+      mode: 'mark',
+    })
     expect(state.cells[CAT]).toBe(CellState.Cat)
     expect(state.cells[WRONG]).toBe(CellState.Wrong)
     expect(state.cells[MARKED]).toBe(CellState.X)
     expect(state.cells[BLANK]).toBe(CellState.X)
   })
 
+  it('erases every marked cell of the stroke when the stroke began on one', () => {
+    const marked = [at(6, 0), at(6, 1), at(6, 2)]
+    const painted = reduce(createGame(SAMPLE_LEVEL), {
+      type: 'paint',
+      mode: 'mark',
+      indices: marked,
+    })
+    const erased = reduce(painted, { type: 'paint', mode: 'erase', indices: marked })
+    for (const index of marked) expect(erased.cells[index]).toBe(CellState.Empty)
+    expect(erased.event).toBe('untick')
+  })
+
+  it('erasing never touches an empty cell, a cat or a wrong guess', () => {
+    const board = mixedBoard()
+    const state = reduce(board, {
+      type: 'paint',
+      mode: 'erase',
+      indices: [CAT, WRONG, MARKED, BLANK],
+    })
+    expect(state.cells[CAT]).toBe(CellState.Cat)
+    expect(state.cells[WRONG]).toBe(CellState.Wrong)
+    expect(state.cells[MARKED]).toBe(CellState.Empty)
+    expect(state.cells[BLANK]).toBe(CellState.Empty)
+  })
+
+  it('returns the same state when an erase stroke finds nothing to clear', () => {
+    const board = mixedBoard()
+    expect(reduce(board, { type: 'paint', mode: 'erase', indices: [CAT, WRONG, BLANK] })).toBe(
+      board,
+    )
+  })
+
   it('returns the same state when the stroke changes nothing', () => {
     const board = mixedBoard()
-    expect(reduce(board, { type: 'paint', indices: [CAT, WRONG, MARKED] })).toBe(board)
-    expect(reduce(board, { type: 'paint', indices: [] })).toBe(board)
+    expect(reduce(board, { type: 'paint', indices: [CAT, WRONG, MARKED], mode: 'mark' })).toBe(
+      board,
+    )
+    expect(reduce(board, { type: 'paint', indices: [], mode: 'mark' })).toBe(board)
   })
 
   it('paints the rest of a stroke that opens on a non-empty cell', () => {
@@ -205,14 +244,16 @@ describe('paint', () => {
     // job: it simply sends no paint action. The reducer has no notion of where
     // a stroke began, so anything it is handed is painted by the ordinary rule.
     const board = mixedBoard()
-    const state = reduce(board, { type: 'paint', indices: [CAT, BLANK] })
+    const state = reduce(board, { type: 'paint', indices: [CAT, BLANK], mode: 'mark' })
     expect(state.cells[CAT]).toBe(CellState.Cat)
     expect(state.cells[BLANK]).toBe(CellState.X)
   })
 
   it('ignores indices that are off the board', () => {
     const fresh = createGame(SAMPLE_LEVEL)
-    expect(reduce(fresh, { type: 'paint', indices: [-1, SIZE * SIZE, 1.5] })).toBe(fresh)
+    expect(reduce(fresh, { type: 'paint', indices: [-1, SIZE * SIZE, 1.5], mode: 'mark' })).toBe(
+      fresh,
+    )
   })
 })
 
@@ -290,7 +331,7 @@ describe('the fail sequence', () => {
     expect(reduce(failing, { type: 'tap', index: BLANK })).toBe(failing)
     expect(reduce(failing, { type: 'doubleTap', index: catAt(3) })).toBe(failing)
     expect(reduce(failing, { type: 'longPress', index: BLANK })).toBe(failing)
-    expect(reduce(failing, { type: 'paint', indices: [BLANK] })).toBe(failing)
+    expect(reduce(failing, { type: 'paint', indices: [BLANK], mode: 'mark' })).toBe(failing)
     expect(reduce(failing, { type: 'reveal' })).toBe(failing)
     expect(reduce(failing, { type: 'hint', index: BLANK, message: 'nope' })).toBe(failing)
     expect(reduce(failing, { type: 'setAutoX', value: true })).toBe(failing)
@@ -502,7 +543,7 @@ describe('purity', () => {
       { type: 'doubleTap', index: catAt(3) },
       { type: 'doubleTap', index: at(3, 0) },
       { type: 'longPress', index: MARKED },
-      { type: 'paint', indices: [BLANK, CAT, MARKED] },
+      { type: 'paint', indices: [BLANK, CAT, MARKED], mode: 'mark' },
       { type: 'reveal' },
       { type: 'hint', index: BLANK, message: 'no cat here' },
       { type: 'dismissHint' },

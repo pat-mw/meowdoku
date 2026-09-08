@@ -1,255 +1,323 @@
-/**
- * Region growth: carve the board into one connected colour region per cat.
- *
- * This stage runs after a valid cat placement and before uniqueness checking.
- * It seeds a region at each cat and grows all of them together by seeded flood
- * fill, so every region ends up 4-connected and holds exactly one cat — the two
- * invariants every later stage assumes.
- *
- * Two independent biases shape the result. Which region grows next leans toward
- * the smallest one, so sizes stay in a workable band instead of one region
- * swallowing the board. Which cell that region then claims is scored by
- * cohesion — how many of the cell's 4-neighbours the region already owns — and
- * weighted by the tier's shape, from fat blocky blobs to long snaking tendrils.
- * Both are seeded weighted choices rather than hard maxima, so two boards with
- * the same shape are still different boards.
- *
- * Every decision comes from the Rng: the result is reproducible from
- * (seed, size, placement, shape) alone.
- */
-
-import type { Rng } from './prng'
+import { type Rng } from './prng'
 import type { RegionShape } from './tiers'
+import { enumerateSolutions } from './uniqueness'
+
+/**
+ * Partitions the board into N connected regions, one around each cat.
+ *
+ * The shape of this partition is what makes a puzzle a puzzle, and getting it
+ * wrong is not a cosmetic problem: an 11x11 board has over five million cat
+ * placements that satisfy the row, column and adjacency rules, and only the
+ * regions can cut that to one. An evenly-sized partition — every region a fat
+ * blob of about N cells — leaves tens of thousands of solutions and was never
+ * once uniquely solvable in twenty thousand attempts at 8x8 or larger.
+ *
+ * Two things fix that, and the numbers behind both were measured rather than
+ * guessed:
+ *
+ *  1. LOPSIDED SIZES. Across a hundred real levels, about half of every board's
+ *     regions touch only one or two rows, sizes run from a single cell to some
+ *     forty per cent of the board, and one or two big regions absorb the rest.
+ *     A small region pins its cat to a handful of cells and constrains hard; the
+ *     big ones constrain almost nothing but soak up the leftovers so the small
+ *     ones can stay small. Growing this way takes an 11x11 board from roughly
+ *     fifty thousand solutions down to a few dozen.
+ *
+ *  2. A SHORT WALK DOWNHILL. A few dozen is still not one, so the partition is
+ *     then refined: move a boundary cell into a neighbouring region, keep the
+ *     move only if the board now has strictly fewer solutions, repeat. Counting
+ *     is capped at the current best, so a move that fails to improve is
+ *     abandoned as soon as it ties, and probes get cheaper as the board tightens.
+ *     This only works because step 1 did the heavy lifting — hill-climbing from
+ *     an even partition is blind, since every probe saturates the cap and no
+ *     move ever looks better than another.
+ *
+ * The intended solution survives every refinement: a cell holding one of its
+ * cats is never moved, so each region keeps exactly one.
+ */
 
 /** regionOf[cellIndex] = region id in 0..size-1 */
 export type RegionMap = Int32Array
 
-/** A cell no region has claimed yet. */
-const UNASSIGNED = -1
-
-/** No such cell, region or direction; returned where a lookup finds nothing. */
-const NONE = -1
-
-/** Direction ids into the neighbour table. The order is part of the seeded stream. */
-const UP = 0
-const RIGHT = 1
-const DOWN = 2
-const LEFT = 3
+/**
+ * Share of the board, in per cent, given to the large regions. Bigger boards
+ * have exponentially more placements to rule out, so they need a more lopsided
+ * partition to stay tractable.
+ */
+const largeShareFor = (size: number): number => {
+  if (size <= 6) return 40
+  if (size <= 8) return 48
+  if (size <= 10) return 55
+  if (size <= 12) return 60
+  return 65
+}
 
 /**
- * Relative weight of a candidate cell by its cohesion (1 to 4 neighbours already
- * in the region), indexed by cohesion - 1.
+ * How many regions are allowed to be large. Two reads far better than one — a
+ * single region covering two thirds of a 15x15 board looks like a mistake — and
+ * measurement showed two constrain just as well as one.
+ */
+const largeCountFor = (size: number): number => (size >= 9 ? 2 : 1)
+
+/**
+ * How eagerly each shape claims a cell, by how well that cell suits it.
  *
- * Blocky climbs steeply, so a region almost always fills its own concavities and
- * comes out rectangular. Irregular leans the other way gently, giving ragged
- * edges that interlock. Snaking leans hard toward cohesion 1 — a cell touching
- * the region only at its tip — which is what draws out a tendril. Every entry
- * stays above zero so no shape is ever forced into a single legal move.
+ * A candidate scores `cohesion - 2 * stretch`, clamped to -4..4 and shifted to
+ * index these tables: a high score means the cell fills the region's silhouette
+ * in, a low score means it reaches outward. Weights are a table rather than a
+ * linear formula because a formula has to be clamped at the bottom, and once
+ * every unattractive cell clamps to the same floor the choice goes uniform and
+ * the shape disappears — which is exactly what a linear version did here.
  */
-const COHESION_WEIGHTS: Record<RegionShape, readonly number[]> = {
-  blocky: [1, 12, 72, 288],
-  mixed: [1, 1, 1, 1],
-  irregular: [8, 4, 2, 1],
-  snaking: [40, 8, 2, 1],
+const SHAPE_WEIGHTS: Record<RegionShape, readonly number[]> = {
+  // Fat and rectangular: strongly prefers filling in over reaching out.
+  blocky: [1, 1, 2, 6, 16, 44, 110, 260, 600],
+  mixed: [3, 4, 6, 9, 13, 19, 27, 38, 54],
+  irregular: [22, 19, 16, 13, 11, 9, 7, 5, 4],
+  // Long tendrils: strongly prefers reaching out over filling in.
+  snaking: [600, 260, 110, 44, 16, 6, 2, 1, 1],
 }
 
-/** Extra weight for the cell directly ahead of a snaking region's growing tip. */
-const SNAKE_STRAIGHT_BONUS = 6
+const SCORE_OFFSET = 4
 
 /**
- * How far a region may outgrow the current smallest before its weight bottoms
- * out at 1. A hard "always grow the smallest" rule would produce N near-identical
- * blobs; this span keeps the pressure loose enough for a real spread of sizes
- * while still stopping one region from running away with the board.
+ * Probes the refinement walk is allowed. Bigger boards start further from unique
+ * and each probe is cheap once the count is low, so they get a longer walk.
  */
-const SIZE_BIAS_SPAN = 8
+const probeBudgetFor = (size: number): number => (size >= 13 ? 1200 : size >= 11 ? 700 : 300)
 
-type RegionState = {
-  /** Unassigned cells 4-adjacent to the region: the pool it claims from. */
-  frontier: number[]
-  /** 1 where a cell already sits in `frontier`, so it is queued at most once. */
-  queued: Uint8Array
-  /** Cells claimed so far, including the cat the region was seeded at. */
-  count: number
-  /** The cell claimed most recently: the tip a snaking region extends from. */
-  tip: number
-  /** The direction the tip last advanced in, or NONE when the region jumped. */
-  tipDirection: number
+/**
+ * How many one-cell regions a board may end up with.
+ *
+ * A one-cell region shows the player exactly where a cat is, so it is a cost —
+ * but the very small regions are also the only reason these boards are uniquely
+ * solvable at all. Forbidding them outright drops the yield above 12x12 to
+ * nothing; allowing one keeps every board size workable while never making a
+ * board that is mostly giveaways. Real levels contain them for the same reason.
+ */
+const MAX_SINGLE_CELL_REGIONS = 1
+
+/**
+ * Ceiling on the first solution count. A board further away than this is not
+ * worth walking downhill — the caller's retry loop finds a better starting point
+ * far more cheaply than this can rescue a bad one.
+ */
+const REFINE_CEILING = 4000
+
+const neighboursOf = (size: number, cell: number, out: number[]): number => {
+  const row = Math.floor(cell / size)
+  const col = cell % size
+  let count = 0
+  if (row > 0) out[count++] = cell - size
+  if (row < size - 1) out[count++] = cell + size
+  if (col > 0) out[count++] = cell - 1
+  if (col < size - 1) out[count++] = cell + 1
+  return count
 }
 
 /**
- * Flat table of the four orthogonal neighbours of every cell, or NONE at an
- * edge. Precomputing it keeps the growth loop free of row/column arithmetic and
- * makes "the cell one step further in the same direction" a single lookup.
+ * The smallest region the grower will aim for.
+ *
+ * A one-cell region hands the player a cat for free, so every board keeps a
+ * floor. The floor stays low on purpose: raising it flattens the size skew, and
+ * the skew is the only thing making these boards uniquely solvable at all.
+ * Measured at 15x15, a floor of five drops the yield of usable boards to zero
+ * while a floor of three keeps it workable. A region can still finish below the
+ * floor if its neighbours box it in, which the tier's acceptance check rejects.
  */
-const buildNeighbourTable = (size: number): Int32Array => {
-  const table = new Int32Array(size * size * 4).fill(NONE)
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const cell = row * size + col
-      const base = cell * 4
-      if (row > 0) table[base + UP] = cell - size
-      if (col < size - 1) table[base + RIGHT] = cell + 1
-      if (row < size - 1) table[base + DOWN] = cell + size
-      if (col > 0) table[base + LEFT] = cell - 1
+const minRegionFor = (size: number): number => (size <= 8 ? 2 : 3)
+
+/**
+ * Target sizes for the small regions. Cubing a uniform draw concentrates the
+ * mass at the small end, which is what produces the one- and two-row regions
+ * that do the constraining, rather than a uniform spread of middling blobs.
+ */
+const drawSmallTargets = (rng: Rng, count: number, budget: number, floor: number): number[] => {
+  const weights: number[] = []
+  let totalWeight = 0
+  for (let i = 0; i < count; i++) {
+    const roll = rng.nextInt(100) + 1
+    const weight = Math.max(1, Math.round((roll * roll * roll) / 10_000))
+    weights.push(weight)
+    totalWeight += weight
+  }
+  const targets: number[] = []
+  let assigned = 0
+  for (let i = 0; i < count; i++) {
+    const share = Math.max(floor, Math.round(((weights[i] as number) / totalWeight) * budget))
+    targets.push(share)
+    assigned += share
+  }
+  // Trim back if rounding overshot the cells actually available, never below the floor.
+  for (let i = count - 1; i >= 0 && assigned > budget; i--) {
+    const take = Math.min(assigned - budget, (targets[i] as number) - floor)
+    targets[i] = (targets[i] as number) - take
+    assigned -= take
+  }
+  return targets
+}
+
+/**
+ * Unassigned cells a region could claim, each scored for how well it suits the
+ * requested shape.
+ *
+ * Two signals combine. Cohesion — how many of the candidate's neighbours the
+ * region already owns — decides local raggedness. Bounding-box growth decides
+ * the overall silhouette, and it is the one that still carries information when
+ * a region is large: by then almost every frontier cell has the same cohesion,
+ * so without it a big region has no shape at all.
+ */
+const frontierOf = (
+  size: number,
+  regions: RegionMap,
+  id: number,
+  shape: RegionShape,
+): { cells: number[]; weights: number[] } => {
+  const table = SHAPE_WEIGHTS[shape]
+  const cells: number[] = []
+  const weights: number[] = []
+  const scratch = [0, 0, 0, 0]
+  const ring = [0, 0, 0, 0]
+
+  let minRow = size
+  let maxRow = -1
+  let minCol = size
+  let maxCol = -1
+  for (let cell = 0; cell < regions.length; cell++) {
+    if (regions[cell] !== id) continue
+    const row = Math.floor(cell / size)
+    const col = cell % size
+    if (row < minRow) minRow = row
+    if (row > maxRow) maxRow = row
+    if (col < minCol) minCol = col
+    if (col > maxCol) maxCol = col
+  }
+
+  for (let cell = 0; cell < regions.length; cell++) {
+    if (regions[cell] !== id) continue
+    const count = neighboursOf(size, cell, scratch)
+    for (let i = 0; i < count; i++) {
+      const candidate = scratch[i] as number
+      if (regions[candidate] !== -1 || cells.includes(candidate)) continue
+
+      let cohesion = 0
+      const ringCount = neighboursOf(size, candidate, ring)
+      for (let j = 0; j < ringCount; j++) {
+        if (regions[ring[j] as number] === id) cohesion++
+      }
+
+      // How much this cell would stretch the region's bounding box. Zero means
+      // it fills the silhouette in; one or two means it reaches outward.
+      const row = Math.floor(candidate / size)
+      const col = candidate % size
+      const stretch =
+        Math.max(0, minRow - row) +
+        Math.max(0, row - maxRow) +
+        Math.max(0, minCol - col) +
+        Math.max(0, col - maxCol)
+
+      const score = Math.max(-SCORE_OFFSET, Math.min(SCORE_OFFSET, cohesion - stretch * 2))
+      cells.push(candidate)
+      weights.push(table[score + SCORE_OFFSET] as number)
     }
   }
-  return table
+  return { cells, weights }
 }
 
-const neighbourAt = (table: Int32Array, cell: number, direction: number): number =>
-  table[cell * 4 + direction] ?? NONE
-
-const regionAt = (regions: RegionMap, cell: number): number => regions[cell] ?? UNASSIGNED
-
-/** The cell holding the cat of `row`. A malformed placement is a caller bug. */
-const catCell = (size: number, placement: readonly number[], row: number): number => {
-  const col = placement[row]
-  if (col === undefined || col < 0 || col >= size) {
-    throw new RangeError(
-      `growRegions: placement[${row}] is not a column of a ${size}x${size} board`,
-    )
+/** Seeded weighted choice over integer weights. */
+const weightedPick = (rng: Rng, cells: number[], weights: number[]): number => {
+  let total = 0
+  for (const weight of weights) total += weight
+  let roll = rng.nextInt(total)
+  for (let i = 0; i < cells.length; i++) {
+    roll -= weights[i] as number
+    if (roll < 0) return cells[i] as number
   }
-  return row * size + col
-}
-
-/** The direction id that steps from `from` to `to`, or NONE if they are not adjacent. */
-const directionBetween = (neighbours: Int32Array, from: number, to: number): number => {
-  for (let direction = 0; direction < 4; direction++) {
-    if (neighbourAt(neighbours, from, direction) === to) return direction
-  }
-  return NONE
-}
-
-/** How many of a cell's 4-neighbours the region already owns; 1 to 4 on a frontier cell. */
-const cohesionOf = (
-  neighbours: Int32Array,
-  regions: RegionMap,
-  cell: number,
-  region: number,
-): number => {
-  let cohesion = 0
-  for (let direction = 0; direction < 4; direction++) {
-    const next = neighbourAt(neighbours, cell, direction)
-    if (next >= 0 && regionAt(regions, next) === region) cohesion++
-  }
-  return cohesion
-}
-
-const candidateWeight = (shape: RegionShape, cohesion: number, straightAhead: boolean): number => {
-  const base = COHESION_WEIGHTS[shape][cohesion - 1] ?? 1
-  return shape === 'snaking' && straightAhead ? base * SNAKE_STRAIGHT_BONUS : base
-}
-
-const enqueueNeighbours = (
-  state: RegionState,
-  neighbours: Int32Array,
-  regions: RegionMap,
-  cell: number,
-): void => {
-  for (let direction = 0; direction < 4; direction++) {
-    const next = neighbourAt(neighbours, cell, direction)
-    if (next < 0 || regionAt(regions, next) !== UNASSIGNED) continue
-    if (state.queued[next] === 1) continue
-    state.queued[next] = 1
-    state.frontier.push(next)
-  }
-}
-
-/** Drops a claimed cell from one region's frontier by swapping in the tail. */
-const dequeue = (state: RegionState, cell: number): void => {
-  if (state.queued[cell] !== 1) return
-  state.queued[cell] = 0
-  for (let i = 0; i < state.frontier.length; i++) {
-    if (state.frontier[i] !== cell) continue
-    const moved = state.frontier.pop()
-    if (moved !== undefined && i < state.frontier.length) state.frontier[i] = moved
-    return
-  }
+  return cells[cells.length - 1] as number
 }
 
 /**
- * Chooses the region that claims the next cell. Regions whose frontier has run
- * dry are boxed in and are skipped; the rest are weighted down by how far they
- * have outgrown the smallest of them, with a floor of 1.
+ * Whether a region stays one connected blob once `removed` leaves it. A region
+ * in two pieces would read to the player as two regions sharing a colour.
  */
-const pickRegion = (rng: Rng, states: readonly RegionState[]): number => {
-  let smallest = Number.MAX_SAFE_INTEGER
-  for (const state of states) {
-    if (state.frontier.length > 0 && state.count < smallest) smallest = state.count
+const staysConnected = (size: number, regions: RegionMap, id: number, removed: number): boolean => {
+  let first = -1
+  let members = 0
+  for (let i = 0; i < regions.length; i++) {
+    if (regions[i] !== id || i === removed) continue
+    members++
+    if (first < 0) first = i
   }
-  if (smallest === Number.MAX_SAFE_INTEGER) return NONE
-
-  const weightOf = (count: number): number => Math.max(1, SIZE_BIAS_SPAN - (count - smallest))
-  let total = 0
-  for (const state of states) {
-    if (state.frontier.length > 0) total += weightOf(state.count)
+  if (members === 0) return false
+  const seen = new Uint8Array(regions.length)
+  const stack = [first]
+  seen[first] = 1
+  let reached = 0
+  const scratch = [0, 0, 0, 0]
+  while (stack.length > 0) {
+    const cell = stack.pop() as number
+    reached++
+    const count = neighboursOf(size, cell, scratch)
+    for (let i = 0; i < count; i++) {
+      const next = scratch[i] as number
+      if (next === removed || seen[next] === 1 || regions[next] !== id) continue
+      seen[next] = 1
+      stack.push(next)
+    }
   }
-
-  let ticket = rng.nextInt(total)
-  for (let region = 0; region < states.length; region++) {
-    const state = states[region]
-    if (!state || state.frontier.length === 0) continue
-    ticket -= weightOf(state.count)
-    if (ticket < 0) return region
-  }
-  return NONE
+  return reached === members
 }
 
-/** Chooses which frontier cell a region claims, weighted by the shape bias. */
-const pickCell = (
-  rng: Rng,
-  state: RegionState,
-  region: number,
-  shape: RegionShape,
-  neighbours: Int32Array,
-  regions: RegionMap,
-): number => {
-  const frontier = state.frontier
-  if (frontier.length === 0) return NONE
-  const straight =
-    state.tipDirection === NONE ? NONE : neighbourAt(neighbours, state.tip, state.tipDirection)
+/** Walks the partition downhill until it has one solution or runs out of probes. */
+const refine = (rng: Rng, size: number, regions: RegionMap, placement: readonly number[]): void => {
+  const anchor = new Uint8Array(regions.length)
+  for (let row = 0; row < size; row++) anchor[row * size + (placement[row] as number)] = 1
 
-  const weights: number[] = []
-  let total = 0
-  for (const cell of frontier) {
-    const cohesion = cohesionOf(neighbours, regions, cell, region)
-    const weight = candidateWeight(shape, cohesion, cell === straight)
-    weights.push(weight)
-    total += weight
-  }
+  let best = enumerateSolutions(size, regions, REFINE_CEILING).length
+  if (best <= 1 || best >= REFINE_CEILING) return
 
-  let ticket = rng.nextInt(total)
-  for (let i = 0; i < frontier.length; i++) {
-    ticket -= weights[i] ?? 0
-    if (ticket < 0) return frontier[i] ?? NONE
-  }
-  return frontier[frontier.length - 1] ?? NONE
-}
+  const counts = regionSizes(size, regions)
+  let singletons = counts.reduce((total, count) => total + (count === 1 ? 1 : 0), 0)
+  const scratch = [0, 0, 0, 0]
+  const targets = [0, 0, 0, 0]
+  const budget = probeBudgetFor(size)
+  for (let probe = 0; probe < budget && best > 1; probe++) {
+    const cell = rng.nextInt(regions.length)
+    if (anchor[cell] === 1) continue
+    const from = regions[cell] as number
 
-const claim = (
-  states: readonly RegionState[],
-  state: RegionState,
-  region: number,
-  cell: number,
-  neighbours: Int32Array,
-  regions: RegionMap,
-): void => {
-  regions[cell] = region
-  state.count += 1
-  state.tipDirection = directionBetween(neighbours, state.tip, cell)
-  state.tip = cell
-  // The cell is no longer claimable by anyone. Only a region owning one of its
-  // 4-neighbours can have queued it, which bounds the cleanup to four lookups.
-  for (let direction = 0; direction < 4; direction++) {
-    const next = neighbourAt(neighbours, cell, direction)
-    if (next < 0) continue
-    const owner = regionAt(regions, next)
-    if (owner === UNASSIGNED) continue
-    const ownerState = states[owner]
-    if (ownerState) dequeue(ownerState, cell)
+    const count = neighboursOf(size, cell, scratch)
+    let candidates = 0
+    for (let i = 0; i < count; i++) {
+      const id = regions[scratch[i] as number] as number
+      if (id === from) continue
+      let seen = false
+      for (let j = 0; j < candidates; j++) {
+        if (targets[j] === id) seen = true
+      }
+      if (!seen) targets[candidates++] = id
+    }
+    if (candidates === 0) continue
+    const target = targets[rng.nextInt(candidates)] as number
+    const fromCount = counts[from] as number
+    if (fromCount <= 1) continue
+    if (fromCount === 2 && singletons >= MAX_SINGLE_CELL_REGIONS) continue
+    if (!staysConnected(size, regions, from, cell)) continue
+
+    regions[cell] = target
+    const next = enumerateSolutions(size, regions, best).length
+    // A move leaving no solution would mean the intended one was cut off, which
+    // immovable anchors make impossible — but never accept such a board anyway.
+    if (next >= 1 && next < best) {
+      best = next
+      counts[from] = fromCount - 1
+      counts[target] = (counts[target] as number) + 1
+      if (fromCount === 2) singletons++
+      if ((counts[target] as number) === 2) singletons--
+    } else {
+      regions[cell] = from
+    }
   }
-  enqueueNeighbours(state, neighbours, regions, cell)
 }
 
 export const growRegions = (
@@ -258,62 +326,154 @@ export const growRegions = (
   placement: readonly number[],
   shape: RegionShape,
 ): RegionMap => {
-  const cells = size * size
-  const regions: RegionMap = new Int32Array(cells).fill(UNASSIGNED)
-  if (size <= 0) return regions
-
-  const neighbours = buildNeighbourTable(size)
-  const states: RegionState[] = []
-  for (let region = 0; region < size; region++) {
-    const seed = catCell(size, placement, region)
-    regions[seed] = region
-    states.push({
-      frontier: [],
-      queued: new Uint8Array(cells),
-      count: 1,
-      tip: seed,
-      tipDirection: NONE,
-    })
+  if (placement.length !== size) {
+    throw new RangeError(`A ${size}-wide board needs ${size} cats, got ${placement.length}`)
+  }
+  for (const col of placement) {
+    if (!Number.isInteger(col) || col < 0 || col >= size) {
+      throw new RangeError(`Cat column ${col} is not a column of a ${size}-wide board`)
+    }
+  }
+  const total = size * size
+  const regions = new Int32Array(total).fill(-1)
+  const seeds: number[] = []
+  for (let row = 0; row < size; row++) {
+    const cell = row * size + (placement[row] as number)
+    seeds.push(cell)
+    regions[cell] = row
   }
 
-  // Frontiers are seeded only once every cat is on the board, so no region ever
-  // queues a cell that is another region's seed.
-  for (const state of states) enqueueNeighbours(state, neighbours, regions, state.tip)
+  const largeCount = Math.min(largeCountFor(size), size)
+  const large = rng.shuffle([...Array(size).keys()]).slice(0, largeCount)
+  const smallIds = rng.shuffle([...Array(size).keys()].filter((id) => !large.includes(id)))
+  const largeCells = Math.round((total * largeShareFor(size)) / 100)
+  const floor = minRegionFor(size)
+  const smallBudget = Math.max(smallIds.length * floor, total - largeCells)
+  const targets = drawSmallTargets(rng, smallIds.length, smallBudget, floor)
 
-  // The grid is 4-connected, so while an unassigned cell remains at least one
-  // region borders one and the loop always has a move to make.
-  for (let assigned = size; assigned < cells; assigned++) {
-    const region = pickRegion(rng, states)
-    if (region === NONE) break
-    const state = states[region]
-    if (!state) break
-    const cell = pickCell(rng, state, region, shape, neighbours, regions)
-    if (cell === NONE) break
-    claim(states, state, region, cell, neighbours, regions)
+  // Each small region is grown to its target before the next one starts, so it
+  // stays a tight blob around its own cat instead of racing its neighbours
+  // across the board.
+  for (const [index, id] of smallIds.entries()) {
+    const target = targets[index] ?? 1
+    let grown = 1
+    while (grown < target) {
+      const { cells, weights } = frontierOf(size, regions, id, shape)
+      if (cells.length === 0) break
+      regions[weightedPick(rng, cells, weights)] = id
+      grown++
+    }
   }
 
+  // The large regions then share everything left, smallest-first so neither one
+  // swallows the board while the other stays a speck.
+  const largeSizes = new Map<number, number>(large.map((id) => [id, 1]))
+  for (;;) {
+    let grew = false
+    const ordered = [...large].sort(
+      (a, b) => (largeSizes.get(a) as number) - (largeSizes.get(b) as number),
+    )
+    for (const id of ordered) {
+      const { cells, weights } = frontierOf(size, regions, id, shape)
+      if (cells.length === 0) continue
+      regions[weightedPick(rng, cells, weights)] = id
+      largeSizes.set(id, (largeSizes.get(id) as number) + 1)
+      grew = true
+      break
+    }
+    if (!grew) break
+  }
+
+  // Pockets nothing could reach — sealed off behind a small region — join
+  // whichever neighbour touches them, so the partition is always complete.
+  const scratch = [0, 0, 0, 0]
+  for (let pass = 0; pass < total; pass++) {
+    let remaining = 0
+    for (let cell = 0; cell < total; cell++) {
+      if (regions[cell] !== -1) continue
+      const count = neighboursOf(size, cell, scratch)
+      let joined = false
+      for (let i = 0; i < count; i++) {
+        const id = regions[scratch[i] as number]
+        if (id === undefined || id === -1) continue
+        regions[cell] = id
+        joined = true
+        break
+      }
+      if (!joined) remaining++
+    }
+    if (remaining === 0) break
+  }
+
+  repairStarvedRegions(rng, size, regions, placement, floor)
+  refine(rng, size, regions, placement)
   return regions
 }
 
-/** Region ids that are 4-adjacent to each other. Symmetric; no self pairs. */
-export const regionAdjacency = (size: number, regions: RegionMap): Set<number>[] => {
-  const adjacency: Set<number>[] = []
-  for (let region = 0; region < size; region++) adjacency.push(new Set<number>())
+/**
+ * Feeds regions that finished below the floor.
+ *
+ * A small region can be sealed in by its neighbours before it reaches its
+ * target, leaving a one- or two-cell region that hands the player a cat. Rather
+ * than throw the board away, take cells from a fat neighbour that can spare
+ * them — never an anchor, and never a cell whose loss would split the donor.
+ */
+const repairStarvedRegions = (
+  rng: Rng,
+  size: number,
+  regions: RegionMap,
+  placement: readonly number[],
+  floor: number,
+): void => {
+  const anchor = new Uint8Array(regions.length)
+  for (let row = 0; row < size; row++) anchor[row * size + (placement[row] as number)] = 1
 
-  const link = (a: number, b: number): void => {
-    if (a === b || a < 0 || a >= size || b < 0 || b >= size) return
-    adjacency[a]?.add(b)
-    adjacency[b]?.add(a)
+  const scratch = [0, 0, 0, 0]
+  for (let pass = 0; pass < size * 2; pass++) {
+    const counts = regionSizes(size, regions)
+    const starved = counts.findIndex((count) => count < floor)
+    if (starved < 0) return
+
+    // Cells the starved region could take: unassigned neighbours are already
+    // gone by now, so it must borrow from a neighbour with cells to spare.
+    const options: number[] = []
+    for (let cell = 0; cell < regions.length; cell++) {
+      if (regions[cell] !== starved) continue
+      const count = neighboursOf(size, cell, scratch)
+      for (let i = 0; i < count; i++) {
+        const candidate = scratch[i] as number
+        const donor = regions[candidate] as number
+        if (donor === starved || anchor[candidate] === 1) continue
+        if ((counts[donor] as number) <= floor) continue
+        if (!staysConnected(size, regions, donor, candidate)) continue
+        if (!options.includes(candidate)) options.push(candidate)
+      }
+    }
+    if (options.length === 0) return
+    regions[rng.pick(options)] = starved
   }
+}
 
-  // Looking right and down only visits every 4-adjacent pair exactly once, and
-  // both directions of a pair are recorded together.
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const cell = row * size + col
-      const here = regionAt(regions, cell)
-      if (col + 1 < size) link(here, regionAt(regions, cell + 1))
-      if (row + 1 < size) link(here, regionAt(regions, cell + size))
+/** Region ids that are 4-adjacent to each other. Symmetric; never self-adjacent. */
+export const regionAdjacency = (size: number, regions: RegionMap): Set<number>[] => {
+  const adjacency: Set<number>[] = Array.from({ length: size }, () => new Set<number>())
+  for (let cell = 0; cell < regions.length; cell++) {
+    const id = regions[cell] as number
+    const row = Math.floor(cell / size)
+    const col = cell % size
+    if (col < size - 1) {
+      const other = regions[cell + 1] as number
+      if (other !== id) {
+        adjacency[id]?.add(other)
+        adjacency[other]?.add(id)
+      }
+    }
+    if (row < size - 1) {
+      const other = regions[cell + size] as number
+      if (other !== id) {
+        adjacency[id]?.add(other)
+        adjacency[other]?.add(id)
+      }
     }
   }
   return adjacency
@@ -321,52 +481,44 @@ export const regionAdjacency = (size: number, regions: RegionMap): Set<number>[]
 
 /** Cell count per region id. */
 export const regionSizes = (size: number, regions: RegionMap): number[] => {
-  const counts = new Array<number>(Math.max(0, size)).fill(0)
-  for (let cell = 0; cell < size * size; cell++) {
-    const region = regionAt(regions, cell)
-    if (region < 0 || region >= size) continue
-    counts[region] = (counts[region] ?? 0) + 1
+  const counts = new Array<number>(size).fill(0)
+  for (const id of regions) {
+    if (id >= 0 && id < size) counts[id] = (counts[id] as number) + 1
   }
   return counts
 }
 
-/** True when every region is a single 4-connected blob and every cell is assigned. */
+/** True when every cell is assigned and every region is a single 4-connected blob. */
 export const regionsAreWellFormed = (size: number, regions: RegionMap): boolean => {
-  const cells = size * size
-  if (size <= 0 || regions.length !== cells) return false
-
+  if (regions.length !== size * size) return false
   const counts = regionSizes(size, regions)
-  const firstCell = new Array<number>(size).fill(NONE)
-  for (let cell = 0; cell < cells; cell++) {
-    const region = regionAt(regions, cell)
-    if (region < 0 || region >= size) return false
-    if (firstCell[region] === NONE) firstCell[region] = cell
+  for (let cell = 0; cell < regions.length; cell++) {
+    const id = regions[cell] as number
+    if (id < 0 || id >= size) return false
   }
-
-  const neighbours = buildNeighbourTable(size)
-  // Regions are disjoint, so one visited set serves every flood fill.
-  const seen = new Uint8Array(cells)
-  const stack: number[] = []
-  for (let region = 0; region < size; region++) {
-    const start = firstCell[region]
-    const expected = counts[region] ?? 0
-    if (start === undefined || start === NONE || expected === 0) return false
-    stack.length = 0
-    stack.push(start)
+  for (let id = 0; id < size; id++) {
+    if ((counts[id] as number) === 0) return false
+    let start = -1
+    for (let cell = 0; cell < regions.length && start < 0; cell++) {
+      if (regions[cell] === id) start = cell
+    }
+    const seen = new Uint8Array(regions.length)
+    const stack = [start]
     seen[start] = 1
     let reached = 0
+    const scratch = [0, 0, 0, 0]
     while (stack.length > 0) {
-      const cell = stack.pop()
-      if (cell === undefined) break
+      const cell = stack.pop() as number
       reached++
-      for (let direction = 0; direction < 4; direction++) {
-        const next = neighbourAt(neighbours, cell, direction)
-        if (next < 0 || seen[next] === 1 || regionAt(regions, next) !== region) continue
+      const count = neighboursOf(size, cell, scratch)
+      for (let i = 0; i < count; i++) {
+        const next = scratch[i] as number
+        if (seen[next] === 1 || regions[next] !== id) continue
         seen[next] = 1
         stack.push(next)
       }
     }
-    if (reached !== expected) return false
+    if (reached !== counts[id]) return false
   }
   return true
 }

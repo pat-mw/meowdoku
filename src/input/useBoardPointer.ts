@@ -20,7 +20,7 @@ export type BoardGesture =
   | { type: 'tap'; index: number }
   | { type: 'doubleTap'; index: number }
   | { type: 'longPress'; index: number }
-  | { type: 'paint'; indices: number[] }
+  | { type: 'paint'; indices: number[]; mode: 'mark' | 'erase' }
 
 /** Movement past this many pixels turns a press into a drag. */
 const DRAG_THRESHOLD_PX = 6
@@ -36,7 +36,8 @@ type Stroke = {
   startIndex: number
   startState: CellState
   moved: boolean
-  painting: boolean
+  /** Null until the stroke crosses the drag threshold and picks a direction. */
+  painting: 'mark' | 'erase' | null
   /** Set once a long press has already acted, so the release is not also a tap. */
   consumed: boolean
   longPressTimer: number | null
@@ -60,6 +61,7 @@ export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointe
   const stroke = useRef<Stroke | null>(null)
   const lastTap = useRef<{ index: number; at: number } | null>(null)
   const pending = useRef<number[]>([])
+  const pendingMode = useRef<'mark' | 'erase' | null>(null)
   const frame = useRef<number | null>(null)
 
   // The board element is held in state rather than a ref so the listeners can be
@@ -73,14 +75,16 @@ export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointe
     const flush = () => {
       frame.current = null
       const indices = pending.current
-      if (indices.length === 0) return
+      const mode = pendingMode.current
+      if (indices.length === 0 || mode === null) return
       pending.current = []
-      emit({ type: 'paint', indices })
+      emit({ type: 'paint', indices, mode })
     }
 
-    const queuePaint = (index: number) => {
+    const queuePaint = (index: number, mode: 'mark' | 'erase') => {
       if (pending.current.includes(index)) return
       pending.current.push(index)
+      pendingMode.current = mode
       frame.current ??= requestAnimationFrame(flush)
     }
 
@@ -131,7 +135,7 @@ export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointe
         startIndex: index,
         startState,
         moved: false,
-        painting: false,
+        painting: null,
         consumed: false,
         longPressTimer: null,
         rect,
@@ -161,16 +165,16 @@ export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointe
           clearTimeout(active.longPressTimer)
           active.longPressTimer = null
         }
-        // A drag only paints when it began on an empty cell; starting on an X, a
-        // cat or a wrong guess drags nothing.
-        if (active.startState === CellState.Empty) {
-          active.painting = true
-          queuePaint(active.startIndex)
-        }
+        // The cell the stroke began on fixes its direction for the whole drag:
+        // from an empty cell it marks, from a marked cell it erases. Starting on
+        // a cat or a wrong guess drags nothing, since those are locked.
+        if (active.startState === CellState.Empty) active.painting = 'mark'
+        else if (active.startState === CellState.X) active.painting = 'erase'
+        if (active.painting) queuePaint(active.startIndex, active.painting)
       }
       if (!active.painting) return
       const index = indexAt(event.clientX, event.clientY, active.rect)
-      if (index >= 0) queuePaint(index)
+      if (index >= 0) queuePaint(index, active.painting)
     }
 
     const onPointerUp = (event: PointerEvent) => {
@@ -212,6 +216,7 @@ export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointe
         frame.current = null
       }
       pending.current = []
+      pendingMode.current = null
     }
   }, [element])
 
