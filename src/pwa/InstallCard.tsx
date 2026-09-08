@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { installAffordance, onInstallAvailabilityChange, showInstallPrompt } from './install'
 
 /**
@@ -8,15 +8,18 @@ import { installAffordance, onInstallAvailabilityChange, showInstallPrompt } fro
  * offers, which is an instruction pointing at the Share menu. Neither ever
  * blocks play, and once the app is running standalone the card disappears for
  * good.
+ *
+ * The affordance is read through useSyncExternalStore because it lives outside
+ * React: the browser decides when a prompt becomes available, and the listener
+ * that captures it runs before React mounts.
  */
 export function InstallCard() {
-  const [affordance, setAffordance] = useState<'prompt' | 'ios-instructions' | 'none'>('none')
+  const affordance = useSyncExternalStore(
+    onInstallAvailabilityChange,
+    installAffordance,
+    () => 'none' as const,
+  )
   const [dismissed, setDismissed] = useState(false)
-
-  useEffect(() => {
-    setAffordance(installAffordance())
-    return onInstallAvailabilityChange(() => setAffordance(installAffordance()))
-  }, [])
 
   if (dismissed || affordance === 'none') return null
 
@@ -25,11 +28,13 @@ export function InstallCard() {
       className="mt-4 w-[280px] rounded-[var(--mdk-radius-panel)] bg-[var(--mdk-card)] p-3.5 text-center"
       style={{ boxShadow: 'var(--mdk-shadow-card)' }}
     >
-      <div className="text-sm font-extrabold text-[var(--mdk-ink)]">Add Meowdoku to your home screen</div>
+      <div className="text-sm font-extrabold text-[var(--mdk-ink)]">
+        Add Meowdoku to your home screen
+      </div>
       {affordance === 'prompt' ? (
         <button
           type="button"
-          onClick={() => void showInstallPrompt().then(() => setAffordance(installAffordance()))}
+          onClick={() => void showInstallPrompt()}
           className="mt-2.5 w-full rounded-[20px] border-none bg-[var(--mdk-ink)] text-sm font-extrabold text-[#FFF7F0]"
           style={{ height: 40 }}
         >

@@ -156,7 +156,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           saved.levelNumber === levelNumber &&
           saved.generatorVersion === level.generatorVersion
 
-        const restored = resumable && saved ? restoreGame(level, saved, { autoX: settings.autoX }) : null
+        const restored =
+          resumable && saved ? restoreGame(level, saved, { autoX: settings.autoX }) : null
         const game = restored ?? createGame(level, { autoX: settings.autoX })
         set({ level, game, loadingLevel: false })
         if (!restored) persist()

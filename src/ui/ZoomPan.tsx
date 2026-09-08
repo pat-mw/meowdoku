@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 /**
@@ -28,10 +28,16 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
   const frame = useRef<HTMLDivElement | null>(null)
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 })
   const pointers = useRef(new Map<number, Point>())
-  const gesture = useRef<{ distance: number; centre: Point; scale: number; x: number; y: number } | null>(null)
+  const gesture = useRef<{
+    distance: number
+    centre: Point
+    scale: number
+    x: number
+    y: number
+  } | null>(null)
 
   /** Keeps the board from being dragged off its own card. */
-  const constrain = useCallback((next: { scale: number; x: number; y: number }) => {
+  const constrain = (next: { scale: number; x: number; y: number }) => {
     const box = frame.current?.getBoundingClientRect()
     if (!box) return next
     const slackX = (box.width * (next.scale - 1)) / 2
@@ -41,11 +47,22 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
       x: clamp(next.x, -slackX, slackX),
       y: clamp(next.y, -slackY, slackY),
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    if (!enabled) setTransform({ scale: 1, x: 0, y: 0 })
-  }, [enabled])
+  // The gesture reads the transform it started from, so the listeners are
+  // installed once instead of being torn down on every frame of a pinch.
+  const beginGesture = useEffectEvent((spread: number, centre: Point) => {
+    gesture.current = {
+      distance: spread,
+      centre,
+      scale: transform.scale,
+      x: transform.x,
+      y: transform.y,
+    }
+  })
+  const applyGesture = useEffectEvent((next: { scale: number; x: number; y: number }) => {
+    setTransform(constrain(next))
+  })
 
   useEffect(() => {
     const element = frame.current
@@ -55,13 +72,7 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
       if (pointers.current.size !== 2) return
       const [a, b] = [...pointers.current.values()] as [Point, Point]
-      gesture.current = {
-        distance: distance(a, b),
-        centre: midpoint(a, b),
-        scale: transform.scale,
-        x: transform.x,
-        y: transform.y,
-      }
+      beginGesture(distance(a, b), midpoint(a, b))
     }
 
     const onMove = (event: PointerEvent) => {
@@ -74,13 +85,11 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
       const spread = distance(a, b)
       const centre = midpoint(a, b)
       const scale = clamp((spread / active.distance) * active.scale, MIN_SCALE, MAX_SCALE)
-      setTransform(
-        constrain({
-          scale,
-          x: active.x + (centre.x - active.centre.x),
-          y: active.y + (centre.y - active.centre.y),
-        }),
-      )
+      applyGesture({
+        scale,
+        x: active.x + (centre.x - active.centre.x),
+        y: active.y + (centre.y - active.centre.y),
+      })
     }
 
     const onUp = (event: PointerEvent) => {
@@ -88,6 +97,7 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
       if (pointers.current.size < 2) gesture.current = null
     }
 
+    const tracked = pointers.current
     element.addEventListener('pointerdown', onDown)
     element.addEventListener('pointermove', onMove, { passive: false })
     element.addEventListener('pointerup', onUp)
@@ -99,10 +109,10 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
       element.removeEventListener('pointerup', onUp)
       element.removeEventListener('pointercancel', onUp)
       element.removeEventListener('pointerleave', onUp)
-      pointers.current.clear()
+      tracked.clear()
       gesture.current = null
     }
-  }, [enabled, constrain, transform.scale, transform.x, transform.y])
+  }, [enabled])
 
   if (!enabled) return <>{children}</>
 

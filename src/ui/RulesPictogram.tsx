@@ -25,9 +25,15 @@ export const RULE_PICTOGRAMS: RulePictogramSpec[] = [
   {
     label: '1 cat per color',
     backgrounds: [
-      'var(--mdk-region-O)', 'var(--mdk-region-O)', 'var(--mdk-region-L)',
-      'var(--mdk-region-O)', 'var(--mdk-region-O)', 'var(--mdk-region-L)',
-      'var(--mdk-region-L)', 'var(--mdk-region-L)', 'var(--mdk-region-L)',
+      'var(--mdk-region-O)',
+      'var(--mdk-region-O)',
+      'var(--mdk-region-L)',
+      'var(--mdk-region-O)',
+      'var(--mdk-region-O)',
+      'var(--mdk-region-L)',
+      'var(--mdk-region-L)',
+      'var(--mdk-region-L)',
+      'var(--mdk-region-L)',
     ],
     glyphs: ['cat', 'x', null, 'x', 'x', null, null, null, null],
     crossColor: '#FFFFFF',

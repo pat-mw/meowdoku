@@ -46,3 +46,23 @@ inputs are stored.
 **Cell states stay numeric (`0 empty, 1 x, 2 cat, 3 wrong`)** and boards persist
 as digit strings, matching the design export's save shape. This keeps an
 in-progress 15x15 board at 225 bytes and makes the save human-inspectable.
+
+## Interaction
+
+**A long press consumes the press on every cell state, not just on a marked
+one.** The design prototype only started a long-press timer on an `x` cell, so a
+slow press on an empty cell fell through to the tap handler and marked it. The
+handover's gesture table says a long press on an empty cell is a no-op, and the
+handover outranks the design export, so the timer now runs on every press and
+the reducer decides what (if anything) it means. The practical effect is that
+resting a finger on the board never marks a cell.
+
+**Double-tap detection lives in the input layer, tap semantics in the reducer.**
+The reducer receives already-classified gestures (`tap`, `doubleTap`,
+`longPress`, `paint`) rather than raw pointer events, which is what makes every
+row of the gesture table directly unit-testable without a DOM.
+
+**The reducer reports effects instead of firing them.** Sound and haptics are
+side effects, but the board logic must stay pure. Each transition stamps an
+`event` on the state and bumps `eventSeq`; the store turns that into a sound and
+a vibration. Nothing in `src/board` knows those exist.

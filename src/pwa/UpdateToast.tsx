@@ -22,7 +22,9 @@ export function UpdateToast({ deferred }: { deferred: boolean }) {
         animation: 'mdkRise .25s',
       }}
     >
-      <span className="text-[13px] font-extrabold text-[var(--mdk-ink-strong)]">New version ready</span>
+      <span className="text-[13px] font-extrabold text-[var(--mdk-ink-strong)]">
+        New version ready
+      </span>
       <button
         type="button"
         onClick={applyUpdate}

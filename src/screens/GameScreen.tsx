@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { CellState } from '../board/types'
 import { liveScore, scoreBreakdown } from '../board/score'
@@ -15,6 +15,9 @@ import { Confetti } from '../ui/Confetti'
 import { HintToast } from '../ui/HintToast'
 import { FailOverlay, WinOverlay } from '../ui/overlays'
 import { SettingsPanel } from './SettingsPanel'
+
+/** A stable empty board, so the input hooks never see a fresh array identity. */
+const EMPTY_CELLS: readonly CellState[] = []
 
 /**
  * The game screen: ninety percent of the product.
@@ -38,28 +41,10 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
   const requestReveal = useGameStore((state) => state.requestReveal)
 
   const [showSettings, setShowSettings] = useState(false)
-  // The "mew..." loader only appears if generation is genuinely slow; a cached
-  // level resolves far faster than this and never flashes a spinner.
-  const [showLoader, setShowLoader] = useState(false)
 
   useEffect(() => {
     void openLevel(levelNumber, { resume: true })
   }, [levelNumber, openLevel])
-
-  useEffect(() => {
-    if (!loadingLevel) {
-      setShowLoader(false)
-      return
-    }
-    const timer = window.setTimeout(() => setShowLoader(true), 150)
-    return () => clearTimeout(timer)
-  }, [loadingLevel])
-
-  const gameRef = useRef(game)
-  gameRef.current = game
-
-  const cellStateAt = (index: number): CellState =>
-    gameRef.current?.cells[index] ?? CellState.Empty
 
   const onGesture = (gesture: BoardGesture) => {
     if (gesture.type === 'paint') dispatch({ type: 'paint', indices: gesture.indices })
@@ -67,11 +52,12 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
   }
 
   const interactive = game !== null && game.status === 'playing' && !showSettings
-  const gridRef = useBoardPointer({ size: game?.size ?? 1, enabled: interactive, cellStateAt, onGesture })
+  const cells = game?.cells ?? EMPTY_CELLS
+  const gridRef = useBoardPointer({ size: game?.size ?? 1, enabled: interactive, cells, onGesture })
   const { cursor } = useBoardKeyboard({
     size: game?.size ?? 1,
     enabled: interactive,
-    cellStateAt,
+    cells,
     onGesture,
   })
 
@@ -110,11 +96,14 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
     )
   }
 
-  if (!game || !level) {
-    return showLoader ? <LevelLoader /> : <div className="flex-1" />
-  }
+  // While a different level is being generated the previous board must not stay
+  // on screen: it would look interactive and accept taps meant for the new one.
+  if (loadingLevel || !game || !level || game.levelNumber !== levelNumber) return <LevelLoader />
 
-  const catsPlaced = game.cells.reduce<number>((total, cell) => total + (cell === CellState.Cat ? 1 : 0), 0)
+  const catsPlaced = game.cells.reduce<number>(
+    (total, cell) => total + (cell === CellState.Cat ? 1 : 0),
+    0,
+  )
   const displayScore =
     game.status === 'win' || game.status === 'winning'
       ? game.score
@@ -147,7 +136,10 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
             <span className="text-[var(--mdk-ink)]">/{game.size}</span>
           </span>
         </Pill>
-        <Pill label={`${game.lives} of ${game.maxLives} fish left`} className="gap-[5px] px-4 py-[7px]">
+        <Pill
+          label={`${game.lives} of ${game.maxLives} fish left`}
+          className="gap-[5px] px-4 py-[7px]"
+        >
           {Array.from({ length: game.maxLives }, (_, index) => (
             <span
               key={index}
@@ -168,7 +160,9 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
           boards the rules collapse behind a summary the player can reopen. */}
       {large ? <CollapsedRules /> : <RulesStrip />}
 
-      <ZoomPan enabled={large}>
+      {/* Keyed by size so a level of a different size gets a fresh transform
+          rather than inheriting the last board's pan and zoom. */}
+      <ZoomPan key={game.size} enabled={large}>
         <Board
           size={game.size}
           regions={game.regions}
@@ -309,10 +303,19 @@ function PowerButton({
   )
 }
 
-/** The loader the design calls for, shown only when generation is slow. */
+/**
+ * The loader the design calls for. It fades in only after a short delay, so a
+ * level that comes back from the cache — which is the common case, because the
+ * next level is prefetched — never flashes a spinner. The delay is CSS rather
+ * than a timer so it costs no render.
+ */
 function LevelLoader() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3.5" role="status">
+    <div
+      className="flex flex-1 flex-col items-center justify-center gap-3.5"
+      role="status"
+      style={{ opacity: 0, animation: 'mdkFade .2s ease 150ms forwards' }}
+    >
       <CatFace className="h-[72px] w-[72px]" />
       <div className="text-base font-extrabold text-[var(--mdk-ink-muted)]">mew…</div>
     </div>

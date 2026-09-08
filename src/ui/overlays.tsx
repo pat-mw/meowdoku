@@ -22,7 +22,11 @@ export function WinOverlay({
 }) {
   return (
     <Overlay label="Level complete">
-      <CatFace expression="happy" className="mx-auto h-[72px] w-[72px]" style={{ animation: 'mdkBounce .6s' }} />
+      <CatFace
+        expression="happy"
+        className="mx-auto h-[72px] w-[72px]"
+        style={{ animation: 'mdkBounce .6s' }}
+      />
       <div className="mt-1 text-[32px] font-black text-[var(--mdk-ink)]">Purrfect!</div>
       {/* Naming the tier alongside the level is what makes the difficulty step
           legible: the player sees they have crossed into a harder band. */}

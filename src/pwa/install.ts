@@ -13,10 +13,10 @@ export type InstallPromptEvent = Event & {
 }
 
 let deferredPrompt: InstallPromptEvent | null = null
-const listeners = new Set<(available: boolean) => void>()
+const listeners = new Set<() => void>()
 
 const notify = () => {
-  for (const listener of listeners) listener(deferredPrompt !== null)
+  for (const listener of listeners) listener()
 }
 
 /** Called once at boot, before React mounts, so no prompt event is missed. */
@@ -33,9 +33,12 @@ export const captureInstallPrompt = (): void => {
   })
 }
 
-export const onInstallAvailabilityChange = (listener: (available: boolean) => void): (() => void) => {
+/** Subscribe shape for useSyncExternalStore: returns an unsubscribe function. */
+export const onInstallAvailabilityChange = (listener: () => void): (() => void) => {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
 export const isInstallPromptAvailable = (): boolean => deferredPrompt !== null
@@ -58,7 +61,8 @@ export const showInstallPrompt = async (): Promise<boolean> => {
 /** True when the app is running from the home screen rather than a browser tab. */
 export const isStandalone = (): boolean => {
   if (typeof window === 'undefined') return false
-  const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  const iosStandalone =
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
   return iosStandalone || window.matchMedia('(display-mode: standalone)').matches
 }
 

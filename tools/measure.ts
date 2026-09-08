@@ -14,7 +14,12 @@ import { countSolutions } from '../src/board/generator/uniqueness'
 import { solveWithTechniques } from '../src/board/generator/techniques'
 import type { RegionShape } from '../src/board/generator/tiers'
 
-export type Grow = (rng: Rng, size: number, placement: readonly number[], shape: RegionShape) => RegionMap
+export type Grow = (
+  rng: Rng,
+  size: number,
+  placement: readonly number[],
+  shape: RegionShape,
+) => RegionMap
 
 export type FunnelRow = {
   size: number
@@ -29,7 +34,12 @@ export type FunnelRow = {
   msPerTrial: number
 }
 
-export const measure = (grow: Grow, size: number, shape: RegionShape, trials: number): FunnelRow => {
+export const measure = (
+  grow: Grow,
+  size: number,
+  shape: RegionShape,
+  trials: number,
+): FunnelRow => {
   const seed = hashString(`measure:${size}:${shape}`)
   let unique = 0
   let deducible = 0

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { cellAt, cellState, cellsInState, revealCat, startFreshGame, tapCell } from './helpers'
 
 /**
@@ -33,7 +33,9 @@ test.describe('persistence', () => {
     for (let i = 0; i < 2; i++) await revealCat(page)
     await solveRemainingByDeduction(page)
 
-    await expect(page.getByRole('dialog', { name: 'Level complete' })).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('dialog', { name: 'Level complete' })).toBeVisible({
+      timeout: 20_000,
+    })
     await page.getByRole('button', { name: 'Level select' }).click()
     await expect(page.getByRole('button', { name: /^Level 2$/ })).toBeEnabled()
     await expect(page.getByRole('button', { name: /^Level 1, \d of 3 stars/ })).toBeVisible()
@@ -52,8 +54,10 @@ test.describe('persistence', () => {
  * row's cells until one lands - a wrong guess costs a fish, so the walk marks
  * cells off first and only attempts cells no placed cat rules out.
  */
-const solveRemainingByDeduction = async (page: import('@playwright/test').Page): Promise<void> => {
-  const size = await page.evaluate(() => document.querySelectorAll('[role="gridcell"]').length ** 0.5)
+const solveRemainingByDeduction = async (page: Page): Promise<void> => {
+  const size = await page.evaluate(
+    () => document.querySelectorAll('[role="gridcell"]').length ** 0.5,
+  )
   for (let attempt = 0; attempt < size * size; attempt++) {
     const cats = await cellsInState(page, 'cat')
     if (cats.length >= size) return
@@ -66,7 +70,8 @@ const solveRemainingByDeduction = async (page: import('@playwright/test').Page):
       if (taken.some((cat) => cat.row === row)) continue
       for (let col = 1; col <= size; col++) {
         if (taken.some((cat) => cat.col === col)) continue
-        if (taken.some((cat) => Math.abs(cat.row - row) <= 1 && Math.abs(cat.col - col) <= 1)) continue
+        if (taken.some((cat) => Math.abs(cat.row - row) <= 1 && Math.abs(cat.col - col) <= 1))
+          continue
         const cell = cellAt(page, row, col)
         if ((await cellState(cell)) !== 'empty') continue
         const { x, y } = await cell.boundingBox().then((box) => ({

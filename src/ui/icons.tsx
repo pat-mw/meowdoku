@@ -19,7 +19,13 @@ export function CatFace({
   expression = 'calm',
 }: IconProps & { expression?: 'calm' | 'wink' | 'happy' }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <polygon
         points="10,28 14,6 30,16"
         fill="var(--mdk-cat-body)"
@@ -49,13 +55,25 @@ export function CatFace({
           <ellipse cx="32" cy="47" rx="16" ry="11" fill="#FFFFFF" />
           <circle cx="21" cy="34" r="5" fill="#FFFFFF" />
           <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
-          <path d="M37 33 Q42 29 47 33" stroke="#FFFFFF" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <path
+            d="M37 33 Q42 29 47 33"
+            stroke="#FFFFFF"
+            strokeWidth="3"
+            fill="none"
+            strokeLinecap="round"
+          />
           <ellipse cx="32" cy="47" rx="4.5" ry="3.5" fill="var(--mdk-cat-nose)" />
         </>
       ) : (
         <>
           <ellipse cx="32" cy="47" rx="16" ry="11" fill="#FFFFFF" />
-          <path d="M16 33 Q21 29 26 33 M38 33 Q43 29 48 33" stroke="#FFFFFF" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <path
+            d="M16 33 Q21 29 26 33 M38 33 Q43 29 48 33"
+            stroke="#FFFFFF"
+            strokeWidth="3"
+            fill="none"
+            strokeLinecap="round"
+          />
           <ellipse cx="32" cy="47" rx="5" ry="4" fill="var(--mdk-cat-nose)" />
         </>
       )}
@@ -66,9 +84,27 @@ export function CatFace({
 /** The home-screen logo: the calm cat with a hint of a smile. */
 export function CatLogo({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 64 64" className={className} style={style} aria-hidden="true" focusable="false">
-      <polygon points="10,28 14,6 30,16" fill="var(--mdk-cat-body)" stroke="var(--mdk-cat-body)" strokeWidth="6" strokeLinejoin="round" />
-      <polygon points="54,28 50,6 34,16" fill="var(--mdk-cat-body)" stroke="var(--mdk-cat-body)" strokeWidth="6" strokeLinejoin="round" />
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <polygon
+        points="10,28 14,6 30,16"
+        fill="var(--mdk-cat-body)"
+        stroke="var(--mdk-cat-body)"
+        strokeWidth="6"
+        strokeLinejoin="round"
+      />
+      <polygon
+        points="54,28 50,6 34,16"
+        fill="var(--mdk-cat-body)"
+        stroke="var(--mdk-cat-body)"
+        strokeWidth="6"
+        strokeLinejoin="round"
+      />
       <ellipse cx="32" cy="38" rx="25" ry="22" fill="var(--mdk-cat-body)" />
       <ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF" />
       <circle cx="21" cy="34" r="5" fill="#FFFFFF" />
@@ -76,15 +112,31 @@ export function CatLogo({ className, style }: IconProps) {
       <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
       <circle cx="42" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
       <polygon points="32,43 28,39 36,39" fill="var(--mdk-cat-nose)" />
-      <path d="M32 43 Q29 48 25 46 M32 43 Q35 48 39 46" stroke="var(--mdk-cat-body)" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <path
+        d="M32 43 Q29 48 25 46 M32 43 Q35 48 39 46"
+        stroke="var(--mdk-cat-body)"
+        strokeWidth="2"
+        fill="none"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
 
 /** The compact cat used in the "cats placed" pill, where detail would be lost. */
-export function CatPip({ className, style, fill = 'var(--mdk-cat-body)' }: IconProps & { fill?: string }) {
+export function CatPip({
+  className,
+  style,
+  fill = 'var(--mdk-cat-body)',
+}: IconProps & { fill?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <polygon points="3,10 5,2 11,6" fill={fill} />
       <polygon points="21,10 19,2 13,6" fill={fill} />
       <ellipse cx="12" cy="14" rx="9" ry="8" fill={fill} />
@@ -98,7 +150,13 @@ export function CatPip({ className, style, fill = 'var(--mdk-cat-body)' }: IconP
 /** One life. Spent lives are greyed by the caller, not by a different drawing. */
 export function Fish({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 34 22" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 34 22"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <ellipse cx="13" cy="11" rx="11" ry="8" fill="var(--mdk-fish-body)" />
       <polygon points="22,11 33,3 33,19" fill="var(--mdk-fish-tail)" />
       <circle cx="8" cy="9" r="1.7" fill="var(--mdk-fish-eye)" />
@@ -109,7 +167,13 @@ export function Fish({ className, style }: IconProps) {
 /** The hint bulb. */
 export function Bulb({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 36 44" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 36 44"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <circle cx="18" cy="16" r="13" fill="#F7CE46" />
       <circle cx="13" cy="12" r="3.5" fill="#FBE49A" />
       <path d="M12 28 h12 v5 a6 6 0 0 1 -12 0 z" fill="#9C8FB8" />
@@ -118,9 +182,19 @@ export function Bulb({ className, style }: IconProps) {
 }
 
 /** The cross a player paints onto a cell. `tone` distinguishes a mark from a wrong guess. */
-export function CrossMark({ className, style, tone = 'mark' }: IconProps & { tone?: 'mark' | 'wrong' }) {
+export function CrossMark({
+  className,
+  style,
+  tone = 'mark',
+}: IconProps & { tone?: 'mark' | 'wrong' }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <path
         d="M6 6 L18 18 M18 6 L6 18"
         stroke={tone === 'wrong' ? 'var(--mdk-coral)' : '#FFFFFF'}
@@ -134,7 +208,13 @@ export function CrossMark({ className, style, tone = 'mark' }: IconProps & { ton
 
 export function BackArrow({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 32 32" className={className} style={style} aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
       <path
         d="M26 16 H7 M14 8 L6 16 L14 24"
         stroke="var(--mdk-ink)"
@@ -149,8 +229,19 @@ export function BackArrow({ className, style }: IconProps) {
 
 export function SettingsGlyph({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 32 32" className={className} style={style} aria-hidden="true" focusable="false">
-      <path d="M5 9 H27 M5 16 H27 M5 23 H27" stroke="var(--mdk-ink)" strokeWidth="3" strokeLinecap="round" />
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      style={style}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M5 9 H27 M5 16 H27 M5 23 H27"
+        stroke="var(--mdk-ink)"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
       <circle cx="12" cy="9" r="3.6" fill="var(--mdk-ink)" stroke="#FFFFFF" strokeWidth="1.5" />
       <circle cx="21" cy="16" r="3.6" fill="var(--mdk-ink)" stroke="#FFFFFF" strokeWidth="1.5" />
       <circle cx="10" cy="23" r="3.6" fill="var(--mdk-ink)" stroke="#FFFFFF" strokeWidth="1.5" />

@@ -12,7 +12,10 @@ export type StoragePersistence = 'persistent' | 'best-effort' | 'unknown'
 export const requestPersistentStorage = async (): Promise<StoragePersistence> => {
   if (typeof navigator === 'undefined' || !navigator.storage) return 'unknown'
   try {
-    if (typeof navigator.storage.persisted === 'function' && (await navigator.storage.persisted())) {
+    if (
+      typeof navigator.storage.persisted === 'function' &&
+      (await navigator.storage.persisted())
+    ) {
       return 'persistent'
     }
     if (typeof navigator.storage.persist !== 'function') return 'unknown'

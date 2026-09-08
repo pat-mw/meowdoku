@@ -34,7 +34,10 @@ export type TechniqueResult = {
   /** Cells still open once only the depth-1 and depth-2 techniques have run to fixpoint.
       Higher means a less forced opening, which reads to a player as harder. */
   candidatesAfterBasics: number
-  /** Count of deductions made at each depth, indexed 1..7. For tuning and tests. */
+  /** Count of deductions made at each depth, indexed 1..7. For tuning and tests.
+      A deduction is one cell settled, so a cat and the eliminations it forces are
+      all credited to the rule that placed it, and the counts sum to the number of
+      cells the run decided. */
   usageByDepth: number[]
 }
 
@@ -228,12 +231,7 @@ const inUnit = (puzzle: Puzzle, unit: number, cell: number): boolean => {
 }
 
 /** Fills `out` with the unit's still-open cells and returns how many there are. */
-const collectCandidates = (
-  puzzle: Puzzle,
-  marks: Marks,
-  unit: number,
-  out: Int32Array,
-): number => {
+const collectCandidates = (puzzle: Puzzle, marks: Marks, unit: number, out: Int32Array): number => {
   const size = puzzle.size
   let count = 0
   if (unit < size) {
@@ -374,6 +372,11 @@ const computeMasks = (puzzle: Puzzle, marks: Marks, scratch: Scratch): void => {
  *
  * A unit with one open cell and no cat must put its cat there. Run to fixpoint
  * internally because the cascade is all one technique.
+ *
+ * Nothing is forced on an untouched board unless some region is a single cell:
+ * every row, every column and every larger region opens with several candidates.
+ * A puzzle whose regions are all bigger than one cell therefore always grades
+ * deeper than 1, however easy it feels.
  */
 const singleCandidate = (puzzle: Puzzle, marks: Marks, scratch: Scratch): number => {
   const units = 3 * puzzle.size
@@ -665,11 +668,7 @@ const asDepth = (value: number): TechniqueDepth | null =>
  * knows the easier rules crack this?", which is what the tests use to prove each
  * rule earns its own depth, and `candidatesAfterBasics` is this run capped at 2.
  */
-export const runTechniques = (
-  size: number,
-  regions: RegionMap,
-  maxDepth: number,
-): TechniqueRun => {
+export const runTechniques = (size: number, regions: RegionMap, maxDepth: number): TechniqueRun => {
   const usageByDepth = new Array<number>(MAX_TECHNIQUE_DEPTH + 1).fill(0)
   const puzzle = buildPuzzle(size, regions)
   if (puzzle === null) {

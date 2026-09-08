@@ -26,7 +26,11 @@ export function Confetti({ seed }: { seed: number }) {
   }, [seed])
 
   return (
-    <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ zIndex: 60 }} aria-hidden="true">
+    <div
+      className="pointer-events-none fixed inset-0 overflow-hidden"
+      style={{ zIndex: 60 }}
+      aria-hidden="true"
+    >
       {pieces.map((piece, index) => (
         <div
           key={index}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { CellState } from '../board/types'
 
 /**
@@ -10,6 +10,10 @@ import { CellState } from '../board/types'
  * captured so a stroke that wanders off the board keeps painting. Painted cells
  * are batched and flushed once per animation frame, so a fast drag across a
  * 15x15 board produces at most one state update per frame.
+ *
+ * The listeners are installed once per element and read the current board
+ * through effect events, so a re-render never has to tear them down and rebuild
+ * them mid-stroke.
  */
 
 export type BoardGesture =
@@ -43,177 +47,173 @@ export type BoardPointerOptions = {
   size: number
   /** Gestures are ignored while an overlay is up or the level is over. */
   enabled: boolean
-  cellStateAt: (index: number) => CellState
+  cells: readonly CellState[]
   onGesture: (gesture: BoardGesture) => void
 }
 
-export const useBoardPointer = ({ size, enabled, cellStateAt, onGesture }: BoardPointerOptions) => {
-  // The handlers are installed once per element, so they read the current props
-  // through refs rather than closing over a stale render.
-  const latest = useRef({ size, enabled, cellStateAt, onGesture })
-  latest.current = { size, enabled, cellStateAt, onGesture }
+export const useBoardPointer = ({ size, enabled, cells, onGesture }: BoardPointerOptions) => {
+  const readSize = useEffectEvent(() => size)
+  const isEnabled = useEffectEvent(() => enabled)
+  const stateAt = useEffectEvent((index: number) => cells[index] ?? CellState.Empty)
+  const emit = useEffectEvent((gesture: BoardGesture) => onGesture(gesture))
 
   const stroke = useRef<Stroke | null>(null)
   const lastTap = useRef<{ index: number; at: number } | null>(null)
   const pending = useRef<number[]>([])
   const frame = useRef<number | null>(null)
 
-  const flush = useCallback(() => {
-    frame.current = null
-    const indices = pending.current
-    if (indices.length === 0) return
-    pending.current = []
-    latest.current.onGesture({ type: 'paint', indices })
-  }, [])
+  // The board element is held in state rather than a ref so the listeners can be
+  // installed from an effect, which is the only place an effect event may be
+  // called from. The ref callback is just the setter.
+  const [element, setElement] = useState<HTMLElement | null>(null)
 
-  const queuePaint = useCallback(
-    (index: number) => {
+  useEffect(() => {
+    if (!element) return
+
+    const flush = () => {
+      frame.current = null
+      const indices = pending.current
+      if (indices.length === 0) return
+      pending.current = []
+      emit({ type: 'paint', indices })
+    }
+
+    const queuePaint = (index: number) => {
       if (pending.current.includes(index)) return
       pending.current.push(index)
       frame.current ??= requestAnimationFrame(flush)
-    },
-    [flush],
-  )
-
-  useEffect(() => {
-    return () => {
-      if (frame.current !== null) cancelAnimationFrame(frame.current)
     }
-  }, [])
 
-  const attach = useCallback(
-    (element: HTMLElement | null) => {
-      if (!element) return undefined
+    /** The cell under a pointer, or -1 when it is outside the board. */
+    const indexAt = (clientX: number, clientY: number, rect: DOMRect): number => {
+      const n = readSize()
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return -1
+      const row = Math.min(n - 1, Math.floor((y / rect.height) * n))
+      const col = Math.min(n - 1, Math.floor((x / rect.width) * n))
+      return row * n + col
+    }
 
-      /** The cell under a pointer, or -1 when it is outside the board. */
-      const indexAt = (clientX: number, clientY: number, rect: DOMRect): number => {
-        const n = latest.current.size
-        const x = clientX - rect.left
-        const y = clientY - rect.top
-        if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return -1
-        const row = Math.min(n - 1, Math.floor((y / rect.height) * n))
-        const col = Math.min(n - 1, Math.floor((x / rect.width) * n))
-        return row * n + col
-      }
+    const clearStroke = () => {
+      const active = stroke.current
+      if (active && active.longPressTimer !== null) clearTimeout(active.longPressTimer)
+      stroke.current = null
+    }
 
-      const clearStroke = () => {
-        const s = stroke.current
-        if (s?.longPressTimer !== null && s?.longPressTimer !== undefined) {
-          clearTimeout(s.longPressTimer)
-        }
-        stroke.current = null
-      }
-
-      const onPointerDown = (event: PointerEvent) => {
-        if (!latest.current.enabled) return
-        // A second finger means the player is pinching or panning a large board,
-        // not painting. Abandon the stroke in flight so the zoom layer owns the
-        // gesture and the release does not also register as a tap.
-        if (stroke.current) {
-          clearStroke()
-          return
-        }
-        // Kills the iOS double-tap-to-zoom that would otherwise fire on a cat
-        // placement, and stops the browser from starting a text selection.
-        event.preventDefault()
-        // The board cannot move during a stroke because `touch-action: none`
-        // suppresses scrolling, so the rect is read once instead of per move.
-        const rect = element.getBoundingClientRect()
-        const index = indexAt(event.clientX, event.clientY, rect)
-        if (index < 0) return
-        try {
-          element.setPointerCapture(event.pointerId)
-        } catch {
-          // Capture is a nicety; a stroke without it still works inside the board.
-        }
-        const startState = latest.current.cellStateAt(index)
-        const s: Stroke = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          startIndex: index,
-          startState,
-          moved: false,
-          painting: false,
-          consumed: false,
-          longPressTimer: null,
-          rect,
-        }
-        // Only a marked cell can be long-pressed, and only to clear the mark.
-        if (startState === CellState.X) {
-          s.longPressTimer = window.setTimeout(() => {
-            const current = stroke.current
-            if (!current || current.moved) return
-            current.consumed = true
-            current.longPressTimer = null
-            latest.current.onGesture({ type: 'longPress', index })
-          }, LONG_PRESS_MS)
-        }
-        stroke.current = s
-      }
-
-      const onPointerMove = (event: PointerEvent) => {
-        const s = stroke.current
-        if (!s || event.pointerId !== s.pointerId) return
-        if (!s.moved) {
-          const dx = event.clientX - s.startX
-          const dy = event.clientY - s.startY
-          if (Math.hypot(dx, dy) <= DRAG_THRESHOLD_PX) return
-          s.moved = true
-          if (s.longPressTimer !== null) {
-            clearTimeout(s.longPressTimer)
-            s.longPressTimer = null
-          }
-          // A drag only paints when it began on an empty cell; starting on an
-          // X, a cat or a wrong guess drags nothing.
-          if (s.startState === CellState.Empty) {
-            s.painting = true
-            queuePaint(s.startIndex)
-          }
-        }
-        if (!s.painting) return
-        const index = indexAt(event.clientX, event.clientY, s.rect)
-        if (index >= 0) queuePaint(index)
-      }
-
-      const onPointerUp = (event: PointerEvent) => {
-        const s = stroke.current
-        if (!s || event.pointerId !== s.pointerId) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isEnabled()) return
+      // A second finger means the player is pinching or panning a large board,
+      // not painting. Abandon the stroke in flight so the zoom layer owns the
+      // gesture and the release does not also register as a tap.
+      if (stroke.current) {
         clearStroke()
-        if (s.consumed || s.moved) return
-        const now = event.timeStamp
-        const previous = lastTap.current
-        // Double-tap detection is per cell: two taps on different cells are two taps.
-        if (previous && previous.index === s.startIndex && now - previous.at < DOUBLE_TAP_MS) {
-          lastTap.current = null
-          latest.current.onGesture({ type: 'doubleTap', index: s.startIndex })
-          return
+        return
+      }
+      // Kills the iOS double-tap-to-zoom that would otherwise fire on a cat
+      // placement, and stops the browser starting a text selection.
+      event.preventDefault()
+      // The board cannot move during a stroke because `touch-action: none`
+      // suppresses scrolling, so the rect is read once instead of per move.
+      const rect = element.getBoundingClientRect()
+      const index = indexAt(event.clientX, event.clientY, rect)
+      if (index < 0) return
+      try {
+        element.setPointerCapture(event.pointerId)
+      } catch {
+        // Capture is a nicety; a stroke without it still works inside the board.
+      }
+      const startState = stateAt(index)
+      const active: Stroke = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startIndex: index,
+        startState,
+        moved: false,
+        painting: false,
+        consumed: false,
+        longPressTimer: null,
+        rect,
+      }
+      // A held press is a long press whatever it started on. Only a marked cell
+      // does anything with it — clearing the mark — but the press is consumed
+      // either way, so resting a finger on an empty cell never marks it.
+      active.longPressTimer = window.setTimeout(() => {
+        const current = stroke.current
+        if (!current || current.moved) return
+        current.consumed = true
+        current.longPressTimer = null
+        emit({ type: 'longPress', index })
+      }, LONG_PRESS_MS)
+      stroke.current = active
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      const active = stroke.current
+      if (!active || event.pointerId !== active.pointerId) return
+      if (!active.moved) {
+        const dx = event.clientX - active.startX
+        const dy = event.clientY - active.startY
+        if (Math.hypot(dx, dy) <= DRAG_THRESHOLD_PX) return
+        active.moved = true
+        if (active.longPressTimer !== null) {
+          clearTimeout(active.longPressTimer)
+          active.longPressTimer = null
         }
-        lastTap.current = { index: s.startIndex, at: now }
-        latest.current.onGesture({ type: 'tap', index: s.startIndex })
+        // A drag only paints when it began on an empty cell; starting on an X, a
+        // cat or a wrong guess drags nothing.
+        if (active.startState === CellState.Empty) {
+          active.painting = true
+          queuePaint(active.startIndex)
+        }
       }
+      if (!active.painting) return
+      const index = indexAt(event.clientX, event.clientY, active.rect)
+      if (index >= 0) queuePaint(index)
+    }
 
-      const onPointerCancel = (event: PointerEvent) => {
-        const s = stroke.current
-        if (!s || event.pointerId !== s.pointerId) return
-        clearStroke()
+    const onPointerUp = (event: PointerEvent) => {
+      const active = stroke.current
+      if (!active || event.pointerId !== active.pointerId) return
+      clearStroke()
+      if (active.consumed || active.moved) return
+      const now = event.timeStamp
+      const previous = lastTap.current
+      // Double-tap detection is per cell: two taps on different cells are two taps.
+      if (previous && previous.index === active.startIndex && now - previous.at < DOUBLE_TAP_MS) {
+        lastTap.current = null
+        emit({ type: 'doubleTap', index: active.startIndex })
+        return
       }
+      lastTap.current = { index: active.startIndex, at: now }
+      emit({ type: 'tap', index: active.startIndex })
+    }
 
-      element.addEventListener('pointerdown', onPointerDown)
-      element.addEventListener('pointermove', onPointerMove)
-      element.addEventListener('pointerup', onPointerUp)
-      element.addEventListener('pointercancel', onPointerCancel)
+    const onPointerCancel = (event: PointerEvent) => {
+      const active = stroke.current
+      if (!active || event.pointerId !== active.pointerId) return
+      clearStroke()
+    }
 
-      return () => {
-        element.removeEventListener('pointerdown', onPointerDown)
-        element.removeEventListener('pointermove', onPointerMove)
-        element.removeEventListener('pointerup', onPointerUp)
-        element.removeEventListener('pointercancel', onPointerCancel)
-        clearStroke()
+    element.addEventListener('pointerdown', onPointerDown)
+    element.addEventListener('pointermove', onPointerMove)
+    element.addEventListener('pointerup', onPointerUp)
+    element.addEventListener('pointercancel', onPointerCancel)
+
+    return () => {
+      element.removeEventListener('pointerdown', onPointerDown)
+      element.removeEventListener('pointermove', onPointerMove)
+      element.removeEventListener('pointerup', onPointerUp)
+      element.removeEventListener('pointercancel', onPointerCancel)
+      clearStroke()
+      if (frame.current !== null) {
+        cancelAnimationFrame(frame.current)
+        frame.current = null
       }
-    },
-    [queuePaint],
-  )
+      pending.current = []
+    }
+  }, [element])
 
-  return attach
+  return setElement
 }

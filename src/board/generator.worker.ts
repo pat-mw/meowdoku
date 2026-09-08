@@ -20,8 +20,7 @@ export type GenerateRequest = {
 }
 
 export type GenerateResponse =
-  | { id: number; ok: true; level: Level }
-  | { id: number; ok: false; error: string }
+  { id: number; ok: true; level: Level } | { id: number; ok: false; error: string }
 
 const scope = self as unknown as DedicatedWorkerGlobalScope
 

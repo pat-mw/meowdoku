@@ -74,7 +74,9 @@ test.describe('board gestures', () => {
     await expect.poll(() => cellState(cat)).toBe('cat')
   })
 
-  test('a drag from an empty cell paints marks and never disturbs other states', async ({ page }) => {
+  test('a drag from an empty cell paints marks and never disturbs other states', async ({
+    page,
+  }) => {
     const anchor = cellAt(page, 3, 3)
     await tapCell(page, anchor)
     await expect.poll(() => cellState(anchor)).toBe('marked not a cat')

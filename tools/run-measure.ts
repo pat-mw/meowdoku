@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { CASES, formatRow, measure, type Grow } from './measure'
 
 /**
@@ -11,7 +12,7 @@ import { CASES, formatRow, measure, type Grow } from './measure'
 const trials = Number(process.argv[2] ?? 300)
 const modulePath = process.argv[3] ?? './src/board/generator/regions.ts'
 
-const loaded = (await import(/* @vite-ignore */ `../${modulePath.replace(/^\.\//, '')}`)) as {
+const loaded = (await import(/* @vite-ignore */ resolve(process.cwd(), modulePath))) as {
   growRegions: Grow
 }
 

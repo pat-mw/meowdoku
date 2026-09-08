@@ -29,8 +29,7 @@ const fromBase64 = (encoded: string): string => {
 export const exportSave = (save: SaveFile): string => PREFIX + toBase64(JSON.stringify(save))
 
 export type ImportResult =
-  | { ok: true; save: SaveFile }
-  | { ok: false; reason: 'format' | 'corrupt' }
+  { ok: true; save: SaveFile } | { ok: false; reason: 'format' | 'corrupt' }
 
 export const importSave = (text: string, now: number): ImportResult => {
   const trimmed = text.trim()

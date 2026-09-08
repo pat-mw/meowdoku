@@ -7,15 +7,7 @@
  * voice, so treat these numbers as design, not as arbitrary constants.
  */
 
-export type SoundKind =
-  | 'tick'
-  | 'untick'
-  | 'mew'
-  | 'bonk'
-  | 'pop'
-  | 'sparkle'
-  | 'win'
-  | 'fail'
+export type SoundKind = 'tick' | 'untick' | 'mew' | 'bonk' | 'pop' | 'sparkle' | 'win' | 'fail'
 
 let context: AudioContext | null = null
 
@@ -28,7 +20,8 @@ const getContext = (): AudioContext | null => {
   if (typeof window === 'undefined') return null
   try {
     const Ctor: typeof AudioContext | undefined =
-      window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return null
     context ??= new Ctor()
     if (context.state === 'suspended') void context.resume()
@@ -51,7 +44,13 @@ type Note = {
   gain: number
 }
 
-const flat = (freq: number, at: number, duration: number, type: OscillatorType, gain: number): Note => ({
+const flat = (
+  freq: number,
+  at: number,
+  duration: number,
+  type: OscillatorType,
+  gain: number,
+): Note => ({
   from: freq,
   to: freq,
   at,

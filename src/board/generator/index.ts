@@ -167,4 +167,5 @@ export const generateLevelWithReport = (levelNumber: number): GenerationReport =
 }
 
 /** Generates level N. */
-export const generateLevel = (levelNumber: number): Level => generateLevelWithReport(levelNumber).level
+export const generateLevel = (levelNumber: number): Level =>
+  generateLevelWithReport(levelNumber).level
