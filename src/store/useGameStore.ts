@@ -228,3 +228,19 @@ export const useGameStore = create<GameStore>((set, get) => {
 
 /** Flushes any pending write. Called when the app is backgrounded or hidden. */
 export const flushPendingSave = (): void => saver.flush()
+
+let booting: Promise<void> | null = null
+
+/**
+ * Resolves once the save is loaded, booting it if nobody has yet.
+ *
+ * Route guards need this: a deep link is resolved before React has mounted, so
+ * a guard that reads the store directly sees an empty save and waves every level
+ * through. Awaiting here is safe because boot never rejects — a corrupt or
+ * missing save falls back to a fresh one.
+ */
+export const ensureBooted = async (): Promise<void> => {
+  if (useGameStore.getState().ready) return
+  booting ??= useGameStore.getState().boot()
+  await booting
+}

@@ -90,15 +90,31 @@ test.describe('board gestures', () => {
     await expect.poll(() => cellState(anchor)).toBe('marked not a cat')
   })
 
-  test('a drag that starts on a marked cell paints nothing', async ({ page }) => {
-    const start = cellAt(page, 4, 1)
-    await tapCell(page, start)
-    await expect.poll(() => cellState(start)).toBe('marked not a cat')
+  test('a drag that starts on a marked cell erases along the stroke', async ({ page }) => {
+    // A stroke takes its direction from the cell it began on, so a row can be
+    // marked with one sweep and cleared with the sweep back.
+    await dragAcross(page, cellAt(page, 4, 1), cellAt(page, 4, 5))
+    for (const col of [1, 2, 3, 4, 5]) {
+      await expect.poll(() => cellState(cellAt(page, 4, col))).toBe('marked not a cat')
+    }
 
-    const before = await cellsInState(page, 'marked not a cat')
-    await dragAcross(page, start, cellAt(page, 4, 5))
-    const after = await cellsInState(page, 'marked not a cat')
-    expect(after).toEqual(before)
+    await dragAcross(page, cellAt(page, 4, 1), cellAt(page, 4, 5))
+    for (const col of [1, 2, 3, 4, 5]) {
+      await expect.poll(() => cellState(cellAt(page, 4, col))).toBe('empty')
+    }
+  })
+
+  test('an erasing drag never disturbs a cat or a wrong guess', async ({ page }) => {
+    await revealCat(page)
+    const cats = await cellsInState(page, 'cat')
+    const match = /^Row (\d+), column (\d+),/.exec(cats[0] ?? '')
+    const catRow = Number(match?.[1])
+    const cat = cellAt(page, catRow, Number(match?.[2]))
+
+    // Mark the cat's row, then sweep back across it: the cat must survive.
+    await dragAcross(page, cellAt(page, catRow, 1), cellAt(page, catRow, 5))
+    await dragAcross(page, cellAt(page, catRow, 1), cellAt(page, catRow, 5))
+    await expect.poll(() => cellState(cat)).toBe('cat')
   })
 
   test('dragging the board never scrolls the page or zooms it', async ({ page }) => {

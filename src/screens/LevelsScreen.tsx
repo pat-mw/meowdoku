@@ -19,7 +19,7 @@ export function LevelsScreen() {
     <section className="flex min-h-0 flex-1 flex-col gap-4" style={{ animation: 'mdkFade .25s' }}>
       <header className="flex items-center">
         <BackButton onClick={() => navigate({ to: '/' })} />
-        <div className="flex-1 text-center text-2xl font-black text-[var(--mdk-ink)]">Levels</div>
+        <h1 className="flex-1 text-center text-2xl font-black text-[var(--mdk-ink)]">Levels</h1>
         <SettingsButton onClick={() => setShowSettings(true)} />
       </header>
 

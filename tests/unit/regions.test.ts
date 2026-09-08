@@ -82,7 +82,6 @@ const connectedCount = (
   return reached
 }
 
-
 /** Every complaint about one grown board, as readable strings. */
 const problemsWith = (
   size: number,

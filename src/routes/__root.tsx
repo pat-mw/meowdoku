@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Outlet, createRootRoute, useRouterState } from '@tanstack/react-router'
-import { useGameStore, flushPendingSave } from '../store/useGameStore'
+import { ensureBooted, flushPendingSave, useGameStore } from '../store/useGameStore'
 import { UpdateToast } from '../pwa/UpdateToast'
 import { CatFace } from '../ui/icons'
 
@@ -8,14 +8,14 @@ export const Route = createRootRoute({ component: RootLayout })
 
 function RootLayout() {
   const ready = useGameStore((state) => state.ready)
-  const boot = useGameStore((state) => state.boot)
+
   const playing = useRouterState({
     select: (state) => state.location.pathname.startsWith('/play/'),
   })
 
   useEffect(() => {
-    void boot()
-  }, [boot])
+    void ensureBooted()
+  }, [])
 
   // Backgrounding is the moment a mobile browser is most likely to kill the tab,
   // so the debounced write is forced out before the app loses the foreground.

@@ -29,9 +29,16 @@ export const centreOf = async (cell: Locator): Promise<{ x: number; y: number }>
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 }
 
+/**
+ * Long enough that the next tap on the same cell is a fresh tap rather than the
+ * second half of a double-tap.
+ */
+const DOUBLE_TAP_WINDOW_MS = 320
+
 export const tapCell = async (page: Page, cell: Locator): Promise<void> => {
   const { x, y } = await centreOf(cell)
   await page.mouse.click(x, y)
+  await page.waitForTimeout(DOUBLE_TAP_WINDOW_MS)
 }
 
 /** Two taps on the same cell inside the double-tap window. */
@@ -68,12 +75,24 @@ export const dragAcross = async (page: Page, from: Locator, to: Locator): Promis
   await page.waitForTimeout(80)
 }
 
-/** Starts from a clean install and waits for the first board to be playable. */
+/**
+ * Starts from a clean install and waits for the first board to be playable.
+ *
+ * Storage is wiped once, by hand, rather than through an init script: an init
+ * script runs on every navigation, so it would also wipe the save on the reload
+ * that the persistence tests are there to check.
+ */
 export const startFreshGame = async (page: Page): Promise<void> => {
-  await page.addInitScript(() => {
+  await page.goto('/')
+  await page.evaluate(async () => {
     try {
       localStorage.clear()
-      indexedDB.deleteDatabase('keyval-store')
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase('keyval-store')
+        request.onsuccess = () => resolve()
+        request.onerror = () => resolve()
+        request.onblocked = () => resolve()
+      })
     } catch {
       // A browser that blocks storage still starts at level 1, which is what we want.
     }

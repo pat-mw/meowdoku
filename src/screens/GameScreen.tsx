@@ -123,7 +123,7 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
       <header className="flex items-center justify-between">
         <BackButton label="Back to home" onClick={() => navigate({ to: '/' })} />
         <div className="flex gap-[38px]">
-          <Counter label="Level" value={game.levelNumber} />
+          <Counter label="Level" value={game.levelNumber} heading />
           <Counter label="Score" value={displayScore} />
         </div>
         <SettingsButton onClick={() => setShowSettings(true)} />
@@ -257,11 +257,15 @@ function CollapsedRules() {
   )
 }
 
-function Counter({ label, value }: { label: string; value: number }) {
+function Counter({ label, value, heading }: { label: string; value: number; heading?: boolean }) {
   return (
     <div className="text-center">
       <div className="text-[15px] font-extrabold text-[var(--mdk-ink-muted)]">{label}</div>
-      <div className="text-[30px] font-black leading-[1.05] text-[var(--mdk-ink)]">{value}</div>
+      {heading ? (
+        <h1 className="text-[30px] font-black leading-[1.05] text-[var(--mdk-ink)]">{value}</h1>
+      ) : (
+        <div className="text-[30px] font-black leading-[1.05] text-[var(--mdk-ink)]">{value}</div>
+      )}
     </div>
   )
 }
