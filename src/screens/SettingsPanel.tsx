@@ -3,6 +3,7 @@ import { useGameStore } from '../store/useGameStore'
 import { SettingsOverlay } from '../ui/overlays'
 import { exportSave, importSave } from '../store/transfer'
 import { APP_VERSION } from '../version'
+import { hapticsSupported } from '../fx/haptics'
 
 const STORAGE_LABELS = {
   persistent: 'persistent',
@@ -101,6 +102,9 @@ export function SettingsPanel({
         ]}
         danger={dangerAction}
         storageLabel={STORAGE_LABELS[storage]}
+        hapticsLabel={
+          hapticsSupported() ? (settings.haptics ? 'on' : 'off') : 'not supported by this browser'
+        }
         version={APP_VERSION}
         onExport={onExport}
         onImport={onImport}

@@ -10,11 +10,37 @@
 export type SoundKind = 'tick' | 'untick' | 'mew' | 'bonk' | 'pop' | 'sparkle' | 'win' | 'fail'
 
 let context: AudioContext | null = null
+/** Set when the audio output device changes, so the next cue rebuilds the context. */
+let contextIsStale = false
+let watchingDevices = false
+
+/**
+ * Rebuilds the context on the next cue.
+ *
+ * An AudioContext is bound to the output device that existed when it was
+ * created. Plugging in Bluetooth headphones mid-game switches the device out
+ * from under it, and the context carries on reporting itself as running while
+ * playing to nothing at all — so the game goes silent and never recovers. There
+ * is no event for "your context is now pointing at a dead sink", so the device
+ * list is watched instead and the context is thrown away and rebuilt.
+ */
+const watchOutputDevices = (): void => {
+  if (watchingDevices) return
+  watchingDevices = true
+  try {
+    navigator.mediaDevices?.addEventListener('devicechange', () => {
+      contextIsStale = true
+    })
+  } catch {
+    // Without mediaDevices there is nothing to watch; the state check below
+    // still recovers a context the browser suspends on its own.
+  }
+}
 
 /**
  * Browsers refuse to start an AudioContext outside a user gesture, so the
- * context is created lazily on the first cue and resumed if it was suspended
- * while the app sat in the background.
+ * context is created lazily on the first cue, resumed if it was suspended while
+ * the app sat in the background, and replaced if the output device changed.
  */
 const getContext = (): AudioContext | null => {
   if (typeof window === 'undefined') return null
@@ -23,8 +49,20 @@ const getContext = (): AudioContext | null => {
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return null
+    watchOutputDevices()
+
+    if (context && (contextIsStale || context.state === 'closed')) {
+      const dead = context
+      context = null
+      contextIsStale = false
+      // Closing is asynchronous and can reject if the context is already gone;
+      // either way the replacement below is what the cue will play through.
+      void dead.close().catch(() => {})
+    }
+
     context ??= new Ctor()
-    if (context.state === 'suspended') void context.resume()
+    // Both 'suspended' and Safari's non-standard 'interrupted' recover this way.
+    if (context.state !== 'running') void context.resume().catch(() => {})
     return context
   } catch {
     return null
@@ -113,4 +151,5 @@ export const disposeSound = (): void => {
   if (!context) return
   void context.close().catch(() => {})
   context = null
+  contextIsStale = false
 }

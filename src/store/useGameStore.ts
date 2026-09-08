@@ -202,6 +202,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       const state = get()
       const settings = { ...state.save.settings, [key]: !state.save.settings[key] }
       set({ save: { ...state.save, settings } })
+      // Switching a feedback setting on demonstrates it immediately, which is
+      // both a nicety and the only way a player can tell whether their device
+      // supports haptics at all.
+      if (key === 'haptics' && settings.haptics) vibrate(HAPTICS.confirm, true)
+      if (key === 'sound' && settings.sound) playSound('pop', true)
       if (key === 'autoX' && state.game) {
         set({ game: reduce(state.game, { type: 'setAutoX', value: settings.autoX }) })
       }

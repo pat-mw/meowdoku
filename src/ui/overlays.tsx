@@ -91,6 +91,7 @@ export function SettingsOverlay({
   toggles,
   danger,
   storageLabel,
+  hapticsLabel,
   version,
   onExport,
   onImport,
@@ -99,6 +100,7 @@ export function SettingsOverlay({
   toggles: readonly SettingsToggle[]
   danger: { label: string; onClick: () => void } | null
   storageLabel: string
+  hapticsLabel: string
   version: string
   onExport: () => void
   onImport: () => void
@@ -139,8 +141,10 @@ export function SettingsOverlay({
       <PrimaryButton onClick={onClose} className="mt-2">
         Close
       </PrimaryButton>
-      <div className="mt-3 text-[11px] font-bold text-[var(--mdk-ink-faint)]">
+      <div className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--mdk-ink-faint)]">
         Meowdoku {version} &middot; Storage: {storageLabel}
+        <br />
+        Haptics: {hapticsLabel}
       </div>
     </Overlay>
   )
