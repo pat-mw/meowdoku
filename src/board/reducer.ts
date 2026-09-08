@@ -196,19 +196,37 @@ export const restoreGame = (
   const cells = parseCells(saved.cells, level.size, level.solution)
   if (cells === null) return null
 
+  // A finished board is never written to a save — only a game still in play is —
+  // so one that arrives here has been hand-edited or corrupted. Restoring it
+  // would produce a dead game: every cat placed, but status 'playing', from
+  // which no action can reach the win. Discarding it starts the level afresh.
+  if (catIndices(cells).length >= level.size) return null
+
   const fresh = createGame(level, options)
   return {
     ...fresh,
     cells,
-    // Clamped rather than rejected: a save made under a more generous life
-    // allowance is still a perfectly good board to carry on with.
+    // Clamped rather than rejected: a save made under a more generous allowance
+    // is still a perfectly good board to carry on with, and clamping stops an
+    // edited save handing itself unlimited power-ups or an unearned score.
     lives: Math.min(saved.lives, fresh.maxLives),
-    revealsLeft: saved.revealsLeft,
-    hintsLeft: saved.hintsLeft,
-    livesLost: saved.livesLost,
-    powerUsed: saved.powerUsed,
+    revealsLeft: Math.min(saved.revealsLeft, fresh.revealsLeft),
+    hintsLeft: Math.min(saved.hintsLeft, fresh.hintsLeft),
+    // Lives lost and power-ups used only ever drive the score down, so they are
+    // floored by what the board itself proves rather than trusted outright.
+    livesLost: Math.max(saved.livesLost, countWrong(cells)),
+    powerUsed: Math.max(
+      saved.powerUsed,
+      fresh.revealsLeft -
+        Math.min(saved.revealsLeft, fresh.revealsLeft) +
+        (fresh.hintsLeft - Math.min(saved.hintsLeft, fresh.hintsLeft)),
+    ),
   }
 }
+
+/** Wrong guesses on a board, each of which cost a life. */
+const countWrong = (cells: readonly CellState[]): number =>
+  cells.reduce<number>((total, cell) => total + (cell === CellState.Wrong ? 1 : 0), 0)
 
 const inBounds = (state: GameState, index: CellIndex): boolean =>
   Number.isInteger(index) && index >= 0 && index < state.cells.length

@@ -147,3 +147,18 @@ from the cell it began on — from an empty cell it marks, from a marked one it
 erases — and the direction is fixed for the whole stroke, so a sweep never flips
 halfway. Cats and wrong guesses stay locked and no stroke touches them, so a
 drag can never undo real progress.
+
+## Tap on a marked cell
+
+**A tap on an `x` clears it; it does not attempt a cat.** The original spec's
+gesture table has tap-on-`x` attempting a cat, on the reasoning that a
+double-tap is just two taps and needs no separate detection. The handover
+replaces that table wholesale with one where a tap toggles the mark off and a
+genuine double-tap (two taps on the same cell within 300 ms) makes the attempt,
+and the handover outranks the spec. Detection is therefore explicit, per cell,
+in the input layer.
+
+The consequence the product owner accepted: the first tap of a double-tap has
+already marked the cell, so a double-tap on an empty cell runs
+empty → `x` → cat attempt. That is expected, and the reducer's `doubleTap` case
+attempts from either `empty` or `x` for exactly this reason.

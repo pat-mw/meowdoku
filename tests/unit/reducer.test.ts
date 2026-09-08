@@ -524,10 +524,28 @@ describe('saving and restoring', () => {
     expect(restoreGame(SAMPLE_LEVEL, { ...clean, cells: digits.join('') })).toBeNull()
   })
 
-  it('restores a won board well enough to finish scoring it', () => {
+  it('discards a save whose board is already complete', () => {
+    // Only a game still in play is ever written to a save, so a finished board
+    // arriving here has been edited or corrupted. Restoring it would strand the
+    // player in a game with every cat placed and no way to reach the win.
     const saved = serializeGame(placeCats(createGame(SAMPLE_LEVEL), ALL_ROWS))
-    const after = restoreGame(SAMPLE_LEVEL, saved)
-    expect(after?.cells.filter((cell) => cell === CellState.Cat)).toHaveLength(SIZE)
+    expect(restoreGame(SAMPLE_LEVEL, saved)).toBeNull()
+  })
+
+  it('never lets an edited save award itself more power-ups than a fresh game', () => {
+    const saved = serializeGame(reduce(createGame(SAMPLE_LEVEL), { type: 'tap', index: MARKED }))
+    const greedy = { ...saved, revealsLeft: 1_000_000, hintsLeft: 1_000_000 }
+    const restored = restoreGame(SAMPLE_LEVEL, greedy)
+    expect(restored?.revealsLeft).toBe(DEFAULT_REVEALS)
+    expect(restored?.hintsLeft).toBe(DEFAULT_HINTS)
+  })
+
+  it('floors lives lost at the wrong guesses the board itself carries', () => {
+    const board = mixedBoard()
+    const saved = { ...serializeGame(board), livesLost: 0 }
+    // The board holds one wrong guess, so a save claiming a flawless run is
+    // corrected rather than believed — three stars have to be earned.
+    expect(restoreGame(SAMPLE_LEVEL, saved)?.livesLost).toBe(1)
   })
 })
 

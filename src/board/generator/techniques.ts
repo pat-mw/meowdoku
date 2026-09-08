@@ -130,8 +130,18 @@ type Scratch = {
 }
 
 /** Indexes a region map, or null when it is not a partition of an N x N board. */
+/**
+ * Row, column and region membership are packed into 32-bit words, so a board
+ * wider than 31 would alias row 0 onto row 32 and let the line-forcing rules
+ * make unsound eliminations while still reporting a depth. The tiers top out at
+ * 15, so this is a guard against a future tier rather than a live bug — but an
+ * unsound elimination produces an unsolvable level rather than an error, which
+ * is exactly the kind of failure that must not be left to chance.
+ */
+const MAX_SUPPORTED_SIZE = 31
+
 const buildPuzzle = (size: number, regions: RegionMap): Puzzle | null => {
-  if (!Number.isInteger(size) || size < 1) return null
+  if (!Number.isInteger(size) || size < 1 || size > MAX_SUPPORTED_SIZE) return null
   const cells = size * size
   if (regions.length !== cells) return null
 
