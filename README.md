@@ -10,7 +10,7 @@ solution and can be solved by pure deduction.
 - **No ads, no accounts, no analytics, no backend.** Nothing leaves the device.
 - **Fully offline** after the first load, and installable to the home screen on
   iOS and Android.
-- **Unbounded levels.** Level *N* is a deterministic pure function of *N*, so
+- **Unbounded levels.** Level _N_ is a deterministic pure function of _N_, so
   every player sees the same puzzle at level 4,812, forever.
 
 ## Getting started
@@ -20,14 +20,14 @@ pnpm install
 pnpm dev
 ```
 
-| Script | What it does |
-| --- | --- |
-| `pnpm dev` | Vite dev server |
-| `pnpm build` | Typecheck, then production build to `dist/` |
-| `pnpm typecheck` | `tsc -b --noEmit` |
-| `pnpm lint` | ESLint, including the React Compiler hook rules |
-| `pnpm test` | Vitest unit suite |
-| `pnpm test:e2e` | Playwright, iPhone 13 and Pixel 5 profiles |
+| Script           | What it does                                    |
+| ---------------- | ----------------------------------------------- |
+| `pnpm dev`       | Vite dev server                                 |
+| `pnpm build`     | Typecheck, then production build to `dist/`     |
+| `pnpm typecheck` | `tsc -b --noEmit`                               |
+| `pnpm lint`      | ESLint, including the React Compiler hook rules |
+| `pnpm test`      | Vitest unit suite                               |
+| `pnpm test:e2e`  | Playwright, iPhone 13 and Pixel 5 profiles      |
 
 ## Layout
 

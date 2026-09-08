@@ -8,11 +8,57 @@
 
 /** The 17 region colour keys. A 15x15 board uses 15, leaving two spares. */
 export const REGION_KEYS = [
-  'O', 'G', 'Y', 'B', 'T', 'P', 'L', 'R', 'M',
-  'U', 'K', 'V', 'N', 'W', 'S', 'C', 'F',
+  'O',
+  'G',
+  'Y',
+  'B',
+  'T',
+  'P',
+  'L',
+  'R',
+  'M',
+  'U',
+  'K',
+  'V',
+  'N',
+  'W',
+  'S',
+  'C',
+  'F',
 ] as const
 
 export type RegionKey = (typeof REGION_KEYS)[number]
+
+/**
+ * Spoken names for the region colours. They live in the pure core rather than
+ * with the palette because the hint engine speaks them ("the forest green
+ * region already has its cat") and the core may not import from the UI layer.
+ */
+export const REGION_NAMES: Record<RegionKey, string> = {
+  O: 'orange',
+  G: 'forest green',
+  Y: 'gold',
+  B: 'light blue',
+  T: 'teal',
+  P: 'pink',
+  L: 'yellow',
+  R: 'brown',
+  M: 'light green',
+  U: 'purple',
+  K: 'rose',
+  V: 'lilac',
+  N: 'peach',
+  W: 'slate blue',
+  S: 'olive',
+  C: 'mint',
+  F: 'jade',
+}
+
+export const isRegionKey = (value: string): value is RegionKey =>
+  (REGION_KEYS as readonly string[]).includes(value)
+
+/** The spoken name for a key, falling back to the key itself for unknown input. */
+export const regionName = (key: string): string => (isRegionKey(key) ? REGION_NAMES[key] : key)
 
 /**
  * Cell states are encoded as small integers because a whole board is persisted

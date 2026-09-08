@@ -1,18 +1,30 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { GameScreen } from '../screens/GameScreen'
+import { useGameStore } from '../store/useGameStore'
 
 export const Route = createFileRoute('/play/$levelNumber')({
   params: {
     parse: (raw) => {
-      const n = Number(raw.levelNumber)
-      if (!Number.isInteger(n) || n < 1) throw new Error('Level number must be a positive integer')
-      return { levelNumber: n }
+      const levelNumber = Number(raw.levelNumber)
+      if (!Number.isInteger(levelNumber) || levelNumber < 1) {
+        throw new Error('A level number must be a positive whole number')
+      }
+      return { levelNumber }
     },
     stringify: ({ levelNumber }) => ({ levelNumber: String(levelNumber) }),
   },
-  component: Placeholder,
+  // Deep-linking to a locked level is harmless but pointless, so it lands on the
+  // level list instead. The save has to be loaded first or every link would bounce.
+  beforeLoad: ({ params }) => {
+    const { ready, save } = useGameStore.getState()
+    if (ready && params.levelNumber > save.currentLevel) {
+      throw redirect({ to: '/levels' })
+    }
+  },
+  component: PlayRoute,
 })
 
-function Placeholder() {
+function PlayRoute() {
   const { levelNumber } = Route.useParams()
-  return <div className="flex flex-1 items-center justify-center font-extrabold">play {levelNumber}</div>
+  return <GameScreen levelNumber={levelNumber} />
 }

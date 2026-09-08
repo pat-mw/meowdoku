@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
@@ -5,7 +6,15 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+  version: string
+}
+
 export default defineConfig({
+  define: {
+    // Surfaced in Settings so a player can quote a build when reporting a problem.
+    __APP_VERSION__: JSON.stringify(version),
+  },
   plugins: [
     tanstackRouter({ target: 'react', autoCodeSplitting: false }),
     react(),
@@ -17,7 +26,8 @@ export default defineConfig({
       manifest: {
         name: 'Meowdoku',
         short_name: 'Meowdoku',
-        description: 'A cosy logic puzzle. Place one cat per colour, row and column — and never let them touch.',
+        description:
+          'A cosy logic puzzle. Place one cat per colour, row and column — and never let them touch.',
         start_url: '/?source=pwa',
         scope: '/',
         display: 'standalone',
@@ -27,7 +37,12 @@ export default defineConfig({
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          {
+            src: '/icons/maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {

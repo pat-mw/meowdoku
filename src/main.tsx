@@ -4,6 +4,11 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 
 import './ui/global.css'
 import { routeTree } from './routeTree.gen'
+import { captureInstallPrompt } from './pwa/install'
+
+// Chromium fires `beforeinstallprompt` early, often before React has mounted,
+// so the listener goes on before anything else.
+captureInstallPrompt()
 
 const router = createRouter({
   routeTree,

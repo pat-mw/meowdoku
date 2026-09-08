@@ -16,5 +16,11 @@
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "vitest.config.ts", "scripts", "eslint.config.js"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "scripts",
+    "eslint.config.js"
+  ]
 }

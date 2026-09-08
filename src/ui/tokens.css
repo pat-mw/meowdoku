@@ -76,39 +76,88 @@
 }
 
 @keyframes mdkPop {
-  0% { transform: scale(0); }
-  70% { transform: scale(1.18); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 @keyframes mdkShake {
-  0%, 100% { transform: translateX(0); }
-  15% { transform: translateX(-4px); }
-  30% { transform: translateX(4px); }
-  45% { transform: translateX(-4px); }
-  60% { transform: translateX(4px); }
-  80% { transform: translateX(-2px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-4px);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
 }
 @keyframes mdkFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes mdkRise {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes mdkConfetti {
-  0% { transform: translateY(-8vh) rotate(0deg); opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateY(108vh) rotate(700deg); opacity: 0; }
+  0% {
+    transform: translateY(-8vh) rotate(0deg);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(108vh) rotate(700deg);
+    opacity: 0;
+  }
 }
 @keyframes mdkWobble {
-  0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(-14deg); }
-  75% { transform: rotate(14deg); }
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-14deg);
+  }
+  75% {
+    transform: rotate(14deg);
+  }
 }
 @keyframes mdkBounce {
-  0%, 100% { transform: scale(1); }
-  45% { transform: scale(1.3); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.3);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

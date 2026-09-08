@@ -1,0 +1,6 @@
+dist
+coverage
+handover
+pnpm-lock.yaml
+src/routeTree.gen.ts
+public/fonts
