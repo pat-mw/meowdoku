@@ -21,6 +21,8 @@ const COHESION_WEIGHTS: Record<RegionShape, readonly number[]> = {
 const COMPACT_WEIGHTS: readonly number[] = [1, 6, 36, 216]
 const SNAKE_STRAIGHT_BONUS = 6
 
+export type Score = 'shape' | 'bbox' | 'axis' | 'bar' | 'contact' | 'bboxcontact' | 'shadow' | 'shadowcontact'
+
 export type Params = {
   alpha: number
   bias: number
@@ -30,8 +32,8 @@ export type Params = {
   seedSpread: boolean
   bboxFloor: boolean
   bboxMain: boolean
-  floorScore: 'shape' | 'bbox' | 'axis' | 'bar'
-  mainScore: 'shape' | 'bbox' | 'axis' | 'bar'
+  floorScore: Score
+  mainScore: Score
   axisPull: number
   singleWinner: boolean
 }
@@ -147,6 +149,46 @@ const barWeight = (s: RegionState, cell: number, size: number, pull: number): nu
   return (s.horizontal ? row === s.seedRow : col === s.seedCol) ? pull : 1
 }
 
+/** How many of a cell's 8 neighbours belong to a region other than `region`. */
+const contactCount = (r: RegionMap, cell: number, size: number, region: number): number => {
+  const row = (cell / size) | 0
+  const col = cell % size
+  let c = 0
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue
+      const rr = row + dr
+      const cc = col + dc
+      if (rr < 0 || rr >= size || cc < 0 || cc >= size) continue
+      const owner = r[rr * size + cc] ?? UNASSIGNED
+      if (owner !== UNASSIGNED && owner !== region) c++
+    }
+  }
+  return c
+}
+
+/** Chebyshev distance from a cell to the nearest cat other than the region's own. */
+const shadowWeight = (
+  cats: readonly number[],
+  cell: number,
+  size: number,
+  region: number,
+  pull: number,
+): number => {
+  const row = (cell / size) | 0
+  const col = cell % size
+  let best = 99
+  for (let i = 0; i < cats.length; i++) {
+    if (i === region) continue
+    const c = cats[i] ?? 0
+    const d = Math.max(Math.abs(((c / size) | 0) - row), Math.abs((c % size) - col))
+    if (d < best) best = d
+  }
+  if (best <= 1) return pull * pull
+  if (best === 2) return pull
+  return 1
+}
+
 const pickCell = (
   rng: Rng,
   s: RegionState,
@@ -155,9 +197,10 @@ const pickCell = (
   n: Int32Array,
   r: RegionMap,
   compact: boolean,
-  score: 'shape' | 'bbox' | 'axis' | 'bar',
+  score: Score,
   size: number,
   pull: number,
+  cats: readonly number[],
 ): number => {
   const frontier = s.frontier
   if (frontier.length === 0) return NONE
@@ -172,6 +215,12 @@ const pickCell = (
     if (score === 'bbox') w *= bboxWeight(s, cell, size)
     else if (score === 'axis') w *= axisWeight(s, cell, size, pull)
     else if (score === 'bar') w *= barWeight(s, cell, size, pull)
+    else if (score === 'contact') w *= 1 + pull * contactCount(r, cell, size, region)
+    else if (score === 'bboxcontact')
+      w *= bboxWeight(s, cell, size) * (1 + pull * contactCount(r, cell, size, region))
+    else if (score === 'shadow') w *= shadowWeight(cats, cell, size, region, pull)
+    else if (score === 'shadowcontact')
+      w *= shadowWeight(cats, cell, size, region, pull) * (1 + contactCount(r, cell, size, region))
     weights.push(w)
     total += w
   }
@@ -300,8 +349,8 @@ export const createGrow =
       if (!s) break
       const inFloor = s.count < floor
       const compact = p.compactFloor && inFloor
-      const score: 'shape' | 'bbox' | 'axis' | 'bar' = inFloor ? p.floorScore : p.mainScore
-      const cell = pickCell(rng, s, region, shape, n, regions, compact, score, size, p.axisPull)
+      const score: Score = inFloor ? p.floorScore : p.mainScore
+      const cell = pickCell(rng, s, region, shape, n, regions, compact, score, size, p.axisPull, cats)
       if (cell === NONE) break
       claim(states, s, region, cell, n, regions, size)
     }

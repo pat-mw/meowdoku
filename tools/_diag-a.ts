@@ -26,9 +26,12 @@ const base: Params = {
   singleWinner: true,
 }
 const combos: Array<[string, Params]> = [
-  ['single bbox', base],
-  ['single shape', { ...base, floorScore: 'shape', compactFloor: false }],
-  ['a3 spread', { ...base, singleWinner: false }],
+  ['contact p8', { ...base, floorScore: 'contact', axisPull: 8 }],
+  ['contact p32', { ...base, floorScore: 'contact', axisPull: 32 }],
+  ['shadow p4', { ...base, floorScore: 'shadow', axisPull: 4 }],
+  ['shadow p16', { ...base, floorScore: 'shadow', axisPull: 16 }],
+  ['shadowcontact p4', { ...base, floorScore: 'shadowcontact', axisPull: 4 }],
+  ['shadowcontact p16 both', { ...base, floorScore: 'shadowcontact', mainScore: 'shadowcontact', axisPull: 16 }],
 ]
 for (const [label, p] of combos) {
   const grow = createGrow(p)

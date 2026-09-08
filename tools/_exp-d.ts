@@ -18,6 +18,9 @@ export type Params = {
   altCap: number
   movesPerRound: number
   targetPick: 'smallest' | 'random' | 'largest'
+  weightMode: 'deficit' | 'flat'
+  fillerCohesion: readonly [number, number, number, number]
+  fillerLineWeights: readonly [number, number, number]
 }
 
 export const DEFAULTS: Params = {
@@ -33,6 +36,9 @@ export const DEFAULTS: Params = {
   altCap: 24,
   movesPerRound: 1,
   targetPick: 'smallest',
+  weightMode: 'deficit',
+  fillerCohesion: [64, 8, 2, 1],
+  fillerLineWeights: [1, 4, 16],
 }
 
 const UNASSIGNED = -1
@@ -175,7 +181,13 @@ const buildTargets = (
 
 const pickRegion = (rng: Rng, states: readonly RegionState[], params: Params): number => {
   const weightOf = (s: RegionState): number =>
-    s.filler ? params.fillerWeight : s.count < s.target ? params.underWeight : params.overWeight
+    params.weightMode === 'deficit'
+      ? Math.max(0, s.target - s.count)
+      : s.filler
+        ? params.fillerWeight
+        : s.count < s.target
+          ? params.underWeight
+          : params.overWeight
 
   let total = 0
   for (const s of states) if (s.frontier.length > 0) total += weightOf(s)
