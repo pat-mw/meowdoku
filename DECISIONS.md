@@ -67,12 +67,12 @@ side effects, but the board logic must stay pure. Each transition stamps an
 `event` on the state and bumps `eventSeq`; the store turns that into a sound and
 a vibration. Nothing in `src/board` knows those exist.
 
-## Region growth, and why the tier table changed
+## Region growth
 
 The handover's generator design — build a random valid cat placement, grow
-regions around it, keep the board if it has exactly one solution — does not
-work as written. Measured over twenty thousand attempts per size with evenly
-grown regions:
+regions around it, keep the board if it has exactly one solution — does not work
+as written. Measured over twenty thousand attempts per size with evenly grown
+regions:
 
 | Board | Legal cat placements | Solutions a grown board has | Unique in 20,000 tries |
 | ----- | -------------------- | --------------------------- | ---------------------- |
@@ -81,62 +81,43 @@ grown regions:
 | 11x11 | 5,296,790            | median 45,374               | 0                      |
 | 15x15 | —                    | over 2,000,000              | 0                      |
 
-Rejection sampling cannot find a needle in five million. Three plausible fixes
-were built and measured, and all three failed on their own:
+Rejection sampling cannot find a needle in five million. Several plausible fixes
+were built and measured, and none worked on its own: matching the reference
+level's lopsided region sizes, making regions thin, and killing alternative
+solutions one at a time all left the yield at or near zero above 8x8.
 
-- **Matching the reference level's lopsided region sizes** (one 42-cell region,
-  the rest 5 to 9). Still zero unique boards above 5x5.
-- **Making regions thin**, since the reference has six regions only two or three
-  columns wide. Still zero, and it produced one-cell regions.
-- **Killing alternative solutions one at a time**, by moving a cell so two of a
-  rival's cats share a region. A 15x15 board has millions of rivals; after nine
-  moves there was no legal aimed move left and the count had not shifted.
+What works is a partition shaped for the job, then repaired with the solver in
+the loop:
 
-What does work is a combination, and the split of labour matters:
+- **N-1 pocket regions** at or just above the tier's minimum size, plus **one
+  basin region** taking 65% to 95% of the board. A five-cell pocket pins its cat
+  to five candidates. The basin looks like filler but is the harsher constraint
+  of the two: "exactly one cat in these 140 cells" forces the other fourteen out
+  of two thirds of the board.
+- **A repair loop driven by the exact solver.** An alternative solution dies the
+  moment any cell it puts a cat on changes region, because that region then holds
+  two of its cats. So the loop enumerates alternatives, counts how many place a
+  cat on each cell, and moves the most-hit cell — one edit invalidating every
+  alternative running through it. Below a handful of alternatives it switches to
+  trying each legal move and keeping the one that leaves fewest solutions, and it
+  rolls back to the best partition seen when a run of edits stops paying.
 
-1. **Lopsided growth.** Across the hundred levels shipped with the design
-   export — every one of which is uniquely solvable — about half of each board's
-   regions touch only one or two rows, sizes run from a single cell to forty per
-   cent of the board, and one or two big regions absorb the rest. Growing that
-   way takes an 11x11 board from ~45,000 solutions to a few dozen.
-2. **A short hill-climb.** A few dozen is not one, so the partition is then
-   walked downhill: move a boundary cell, keep the move only if the board has
-   strictly fewer solutions. Counting is capped at the current best, so probes
-   get cheaper as the board tightens.
+The repair loop, not the growth bias, is what carries the large boards. Without
+it a 15x15 board is essentially never uniquely solvable; with it, about three
+quarters are. Overall yield across sizes 5 to 15 is roughly 83%, every level from
+1 to 4,812 generates on its own tier's acceptance rules rather than falling down
+the degradation ladder, and the slowest tier builds a board in under half a
+second.
 
-Neither half works alone. Hill-climbing from an even partition is blind, because
-every probe saturates the cap and no move looks better than another — that was
-measured too: 1,391 probes at 11x11, zero accepted.
+The tier table's numbers are otherwise exactly as the handover specified, with
+one correction the measurements forced:
 
-Result: every board size from 5x5 to 15x15 now yields uniquely solvable,
-deduction-solvable boards, and every level from 1 to 4,812 generates on its
-tier's own acceptance rules rather than falling down the degradation ladder.
-
-### Consequences for the tier table
-
-The handover says of its starting table: "tune the numbers, keep the shape."
-Two numbers had to move, and both are recorded here because they are visible to
-players.
-
-**`minRegionSize` is 1 rather than 2 to 5.** The very small regions are what
-make a board uniquely solvable — they pin a cat to a handful of cells. Holding
-every region to three cells or more drops the yield above 12x12 to zero. The
-generator therefore permits at most **one** single-cell region per board, which
-is what the real game's own levels do; every other region has at least two
-cells.
-
-**The depth bands top out at 7 but realistically reach 5.** The seven-technique
-scale is implemented in full, and the solver reports honestly which depth a
-board needed. In practice the shallower techniques almost always suffice, so
-boards needing depth 6 or 7 are vanishingly rare. Rather than write bands the
-generator can never satisfy — which would send every hard level down the
-degradation ladder and silently flatten the progression the table exists to
-create — the bands were set to what is actually reachable. Depth still steps
-from 1 at Kitten to 5 at Grandmaster, alongside board size going 5x5 to 15x15,
-so the progression is real; it is the 6-and-7 ceiling that was aspirational.
-
-Both changes are baked into `GENERATOR_VERSION` 1, which has not shipped, so no
-save can reference the earlier numbers.
+**`minCandidatesAfterBasics` must be zero for any tier whose depth band tops out
+at 2.** That field counts cells still unknown once the depth-1 and depth-2
+techniques have run, and a puzzle solvable at depth 2 is by definition fully
+cracked by them — so the count is always zero there, and any positive threshold
+is unsatisfiable. The thresholds for the deeper tiers are set from the measured
+tenth percentile of boards that already satisfy the tier's depth band.
 
 ## Interaction, continued
 

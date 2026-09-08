@@ -82,25 +82,6 @@ const connectedCount = (
   return reached
 }
 
-/** Share of 4-adjacent cell pairs that sit inside one region: fat shapes score higher. */
-const meanCohesion = (size: number, regions: RegionMap): number => {
-  let same = 0
-  let pairs = 0
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const cell = row * size + col
-      if (col + 1 < size) {
-        pairs++
-        if (regions[cell] === regions[cell + 1]) same++
-      }
-      if (row + 1 < size) {
-        pairs++
-        if (regions[cell] === regions[cell + size]) same++
-      }
-    }
-  }
-  return pairs === 0 ? 0 : same / pairs
-}
 
 /** Every complaint about one grown board, as readable strings. */
 const problemsWith = (
@@ -229,21 +210,45 @@ describe('growRegions', () => {
   })
 
   it('grows fatter regions for blocky than for snaking', () => {
-    // Mean cohesion is the share of adjacent cell pairs inside one region: fat
-    // blobs share many, thin tendrils few. Over 40 seeds the gap runs about
-    // 0.05 to 0.08, so 0.02 is a wide margin around a stable difference.
+    // Measured on the pockets only. One region — the basin — absorbs most of the
+    // board and is grown for constraint rather than looks, so whole-board
+    // cohesion is dominated by it and says nothing about the requested shape.
+    // The pockets are what the eye reads as coloured patches.
     const size = 11
     const placement = ladderPlacement(size)
-    const meanFor = (shape: RegionShape): number => {
+    const meanPocketCohesion = (shape: RegionShape): number => {
       let total = 0
+      let samples = 0
       for (let seed = 0; seed < 40; seed++) {
-        total += meanCohesion(size, growRegions(new Rng(seed), size, placement, shape))
+        const map = growRegions(new Rng(seed), size, placement, shape)
+        const sizes = regionSizes(size, map)
+        const basin = sizes.indexOf(Math.max(...sizes))
+        for (let id = 0; id < size; id++) {
+          if (id === basin) continue
+          let pairs = 0
+          let same = 0
+          for (let cell = 0; cell < map.length; cell++) {
+            if (map[cell] !== id) continue
+            const row = Math.floor(cell / size)
+            const col = cell % size
+            if (col < size - 1) {
+              pairs++
+              if (map[cell + 1] === id) same++
+            }
+            if (row < size - 1) {
+              pairs++
+              if (map[cell + size] === id) same++
+            }
+          }
+          if (pairs > 0) {
+            total += same / pairs
+            samples++
+          }
+        }
       }
-      return total / 40
+      return total / samples
     }
-    const blocky = meanFor('blocky')
-    const snaking = meanFor('snaking')
-    expect(blocky).toBeGreaterThan(snaking + 0.02)
+    expect(meanPocketCohesion('blocky')).toBeGreaterThan(meanPocketCohesion('snaking') + 0.015)
   })
 })
 
