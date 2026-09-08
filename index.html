@@ -2,10 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
-    />
+    <!--
+      Deliberately zoomable. Locking the viewport with user-scalable=no is the
+      usual way to stop a double-tap on a cell zooming the page, but it also
+      stops a player who needs to magnify the board from doing so, and it fails
+      WCAG 1.4.4. The board suppresses the double-tap zoom on its own instead:
+      touch-action is none on the grid and pointerdown is prevented, so the
+      gesture never reaches the browser, while the rest of the page still zooms.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Meowdoku</title>
     <meta
       name="description"

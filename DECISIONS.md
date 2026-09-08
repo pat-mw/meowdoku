@@ -143,3 +143,32 @@ The consequence the product owner accepted: the first tap of a double-tap has
 already marked the cell, so a double-tap on an empty cell runs
 empty → `x` → cat attempt. That is expected, and the reducer's `doubleTap` case
 attempts from either `empty` or `x` for exactly this reason.
+
+## The viewport is zoomable
+
+The stack doc calls for `user-scalable=no, maximum-scale=1`, to stop a
+double-tap on a cell zooming the page instead of placing a cat. It also calls
+for a Lighthouse accessibility score of 90 or better. Those two requirements
+contradict each other: locking the viewport fails WCAG 1.4.4 and caps the
+accessibility score at 79.
+
+The lock is the wrong half to keep. A player who needs to magnify a 15x15 board
+is exactly the player the setting would shut out, and the double-tap problem has
+a narrower fix: `touch-action: none` on the grid and `preventDefault` on
+pointerdown mean the gesture never reaches the browser, so the board does not
+zoom while the rest of the page still does. Controls carry
+`touch-action: manipulation` for the same reason.
+
+With the lock removed, Lighthouse reports 100 for performance, accessibility and
+best practices. An end-to-end test drives a genuine two-tap touch sequence on
+WebKit and asserts both that the visual viewport scale is still 1 and that the
+tap reached the game, so a regression here fails the build rather than shipping.
+
+## Lighthouse no longer has a PWA category
+
+Lighthouse 12 removed it, so `installable-manifest`, `service-worker`,
+`maskable-icon` and `apple-touch-icon` are not audits any more and asserting on
+them fails as "not a known audit". They have been dropped from the Lighthouse
+config. Installability is verified instead against the deployed site — manifest,
+icon resolution, iOS head tags and an active service worker — and by the release
+checklist.

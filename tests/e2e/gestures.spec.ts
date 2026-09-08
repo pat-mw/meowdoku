@@ -117,14 +117,29 @@ test.describe('board gestures', () => {
     await expect.poll(() => cellState(cat)).toBe('cat')
   })
 
-  test('dragging the board never scrolls the page or zooms it', async ({ page }) => {
+  test('dragging the board never scrolls the page', async ({ page }) => {
     const scrollBefore = await page.evaluate(() => window.scrollY)
     await dragAcross(page, cellAt(page, 1, 1), cellAt(page, 5, 5))
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+  })
 
-    await doubleTapCell(page, cellAt(page, 2, 4))
-    const scale = await page.evaluate(() => window.visualViewport?.scale ?? 1)
-    expect(scale).toBe(1)
+  test('a real double-tap on a cell places a cat without zooming the page', async ({ page }) => {
+    // The page is deliberately left zoomable for accessibility, so the board has
+    // to suppress the double-tap zoom itself. Driven through the touchscreen
+    // rather than the mouse, because only a genuine touch sequence triggers the
+    // browser's own double-tap gesture.
+    const cell = cellAt(page, 2, 4)
+    const box = await cell.boundingBox()
+    if (!box) throw new Error('cell is not visible')
+    const x = box.x + box.width / 2
+    const y = box.y + box.height / 2
+    await page.touchscreen.tap(x, y)
+    await page.touchscreen.tap(x, y)
+    await page.waitForTimeout(400)
+
+    expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1)
+    // The gesture still reached the game: the cell is no longer untouched.
+    expect(await cellState(cell)).not.toBe('empty')
   })
 
   test('the hint power-up marks a cell and explains itself', async ({ page }) => {

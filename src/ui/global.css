@@ -26,6 +26,9 @@ body {
 /* Buttons inherit the rounded type rather than the UA default. */
 button {
   font-family: inherit;
+  /* Suppresses the double-tap-to-zoom gesture on controls without locking the
+     viewport, so the page as a whole stays zoomable. */
+  touch-action: manipulation;
 }
 
 :focus-visible {
