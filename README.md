@@ -1,5 +1,8 @@
 # Meowdoku
 
+**Play it: [meowdoku-mu.vercel.app](https://meowdoku-mu.vercel.app)** — add it to
+your home screen and it works offline.
+
 An ad-free, installable web clone of a Star-Battle/Queens-style logic puzzle,
 with cats.
 
