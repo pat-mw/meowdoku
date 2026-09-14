@@ -1,25 +1,45 @@
 /**
- * The one-line explanation a hint leaves behind.
+ * The explanation a hint leaves behind.
  *
  * It sits above the toolbar rather than over the board, so the gold-outlined
- * cell it is talking about stays visible while the player reads it. It is a
- * polite live region: it should not interrupt a screen reader mid-sentence.
+ * cells it is talking about stay visible while the player reads it. The rule's
+ * name leads, because that is the part worth learning and carrying to the next
+ * puzzle; the reasoning follows underneath.
  */
-export function HintToast({ message }: { message: string }) {
+export function HintToast({
+  title,
+  message,
+  count,
+  more,
+}: {
+  title: string
+  message: string
+  count: number
+  more: number
+}) {
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed left-1/2 -translate-x-1/2 rounded-2xl bg-[var(--mdk-card)] px-[18px] py-2.5 text-center text-sm font-extrabold text-[var(--mdk-ink-strong)]"
+      className="fixed left-1/2 -translate-x-1/2 rounded-2xl bg-[var(--mdk-card)] px-4 py-3 text-left"
       style={{
-        bottom: 'calc(118px + env(safe-area-inset-bottom))',
-        maxWidth: '80vw',
+        bottom: 'calc(112px + env(safe-area-inset-bottom))',
+        width: 'min(88vw, 400px)',
         zIndex: 40,
         boxShadow: 'var(--mdk-shadow-toast)',
         animation: 'mdkRise .25s',
       }}
     >
-      {message}
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[13px] font-black text-[var(--mdk-ink)]">{title}</span>
+        <span className="flex-none text-[11px] font-extrabold text-[var(--mdk-ink-faint)]">
+          {count === 1 ? '1 cell' : `${count} cells`} marked
+          {more > 0 ? ` · ${more} more follow` : ''}
+        </span>
+      </div>
+      <p className="mt-1 text-[13px] font-bold leading-snug text-[var(--mdk-ink-strong)]">
+        {message}
+      </p>
     </div>
   )
 }

@@ -193,7 +193,13 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!game || game.hintsLeft <= 0 || game.status !== 'playing') return
       const hint = findHint(game)
       if (!hint) return
-      get().dispatch({ type: 'hint', index: hint.index, message: hint.message })
+      get().dispatch({
+        type: 'hint',
+        cells: hint.cells,
+        title: hint.title,
+        message: hint.message,
+        more: hint.more,
+      })
     },
 
     requestReveal: () => get().dispatch({ type: 'reveal' }),

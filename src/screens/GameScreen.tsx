@@ -78,9 +78,10 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
 
   useEffect(() => {
     if (!game?.hintMessage) return
-    const timer = window.setTimeout(() => dispatch({ type: 'dismissHint' }), 3500)
+    // Long enough to read a full explanation rather than glimpse it.
+    const timer = window.setTimeout(() => dispatch({ type: 'dismissHint' }), 7000)
     return () => clearTimeout(timer)
-  }, [game?.hintMessage, game?.hintCell, dispatch])
+  }, [game?.hintMessage, dispatch])
 
   if (loadError) {
     return (
@@ -170,7 +171,7 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
           cells={game.cells}
           lastCat={game.lastCat}
           lastWrong={game.lastWrong}
-          hintCell={game.hintCell}
+          hintCells={game.hintCells}
           cursor={cursor}
           colorBlind={colorBlind}
           celebrating={game.status === 'winning' || game.status === 'win'}
@@ -198,7 +199,14 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
         </PowerButton>
       </div>
 
-      {game.hintMessage ? <HintToast message={game.hintMessage} /> : null}
+      {game.hintMessage && game.hintTitle ? (
+        <HintToast
+          title={game.hintTitle}
+          message={game.hintMessage}
+          count={game.hintCells.length}
+          more={game.hintMore}
+        />
+      ) : null}
 
       {game.status === 'winning' || game.status === 'win' ? (
         <Confetti seed={game.levelNumber} />

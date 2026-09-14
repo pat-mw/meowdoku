@@ -23,8 +23,8 @@ export type BoardProps = {
   lastCat: number
   /** Cell to shake, from the most recent wrong guess. -1 for none. */
   lastWrong: number
-  /** Cell the last hint outlined in gold. -1 for none. */
-  hintCell: number
+  /** Cells the last hint settled, outlined in gold. */
+  hintCells: readonly number[]
   /** Keyboard focus cursor, or null when the player is using a pointer. */
   cursor: BoardCursor
   /** Renders the region letter in each cell for players who cannot rely on hue. */
@@ -48,7 +48,7 @@ export function Board({
   cells,
   lastCat,
   lastWrong,
-  hintCell,
+  hintCells,
   cursor,
   colorBlind,
   celebrating,
@@ -122,7 +122,7 @@ export function Board({
                   animation,
                   boxShadow: focused
                     ? 'inset 0 0 0 3px var(--mdk-ink-pictogram)'
-                    : index === hintCell
+                    : hintCells.includes(index)
                       ? '0 0 0 3px var(--mdk-gold)'
                       : 'none',
                   opacity: dimmed ? 0.55 : 1,

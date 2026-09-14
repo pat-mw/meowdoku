@@ -58,7 +58,7 @@ describe('createGame', () => {
     expect(state.status).toBe('playing')
     expect(state.lastCat).toBe(-1)
     expect(state.lastWrong).toBe(-1)
-    expect(state.hintCell).toBe(-1)
+    expect(state.hintCells).toEqual([])
     expect(state.hintMessage).toBeNull()
     expect(state.score).toBe(0)
     expect(state.stars).toBe(0)
@@ -333,7 +333,9 @@ describe('the fail sequence', () => {
     expect(reduce(failing, { type: 'longPress', index: BLANK })).toBe(failing)
     expect(reduce(failing, { type: 'paint', indices: [BLANK], mode: 'mark' })).toBe(failing)
     expect(reduce(failing, { type: 'reveal' })).toBe(failing)
-    expect(reduce(failing, { type: 'hint', index: BLANK, message: 'nope' })).toBe(failing)
+    expect(
+      reduce(failing, { type: 'hint', cells: [BLANK], title: 'One cat per row', message: 'nope' }),
+    ).toBe(failing)
     expect(reduce(failing, { type: 'setAutoX', value: true })).toBe(failing)
 
     const done = reduce(failing, { type: 'settle' })
@@ -369,7 +371,12 @@ describe('the win sequence', () => {
 
   it('charges the fish and the power-ups it took', () => {
     const start = reduce(createGame(SAMPLE_LEVEL), { type: 'doubleTap', index: WRONG })
-    const hinted = reduce(start, { type: 'hint', index: BLANK, message: 'not here' })
+    const hinted = reduce(start, {
+      type: 'hint',
+      cells: [BLANK],
+      title: 'One cat per row',
+      message: 'not here',
+    })
     const state = placeCats(hinted, ALL_ROWS)
     expect(state.status).toBe('winning')
     expect(state.score).toBe(finalScore(SIZE, 1, 1))
@@ -423,38 +430,63 @@ describe('reveal', () => {
 })
 
 describe('hint', () => {
+  const HINT = {
+    type: 'hint',
+    title: 'One cat per row',
+    message: 'row 8 already has its cat',
+  } as const
+
   it('marks the cell it points at and shows its reason', () => {
-    const state = reduce(createGame(SAMPLE_LEVEL), {
-      type: 'hint',
-      index: BLANK,
-      message: 'this row only fits its cat further along',
-    })
+    const state = reduce(createGame(SAMPLE_LEVEL), { ...HINT, cells: [BLANK] })
     expect(state.cells[BLANK]).toBe(CellState.X)
-    expect(state.hintCell).toBe(BLANK)
-    expect(state.hintMessage).toBe('this row only fits its cat further along')
+    expect(state.hintCells).toEqual([BLANK])
+    expect(state.hintTitle).toBe('One cat per row')
+    expect(state.hintMessage).toBe('row 8 already has its cat')
     expect(state.hintsLeft).toBe(DEFAULT_HINTS - 1)
     expect(state.powerUsed).toBe(1)
     expect(state.event).toBe('pop')
   })
 
+  it('marks every cell a rule settles, not just the first', () => {
+    const group = [at(6, 0), at(6, 1), at(6, 2), at(6, 4)]
+    const state = reduce(createGame(SAMPLE_LEVEL), { ...HINT, cells: group })
+    for (const index of group) expect(state.cells[index]).toBe(CellState.X)
+    expect(state.hintCells).toEqual(group)
+  })
+
+  it('only counts the cells it actually settled', () => {
+    const marked = reduce(createGame(SAMPLE_LEVEL), { type: 'tap', index: at(6, 0) })
+    const state = reduce(marked, { ...HINT, cells: [at(6, 0), at(6, 1)] })
+    // The already-marked cell is not re-marked, and the outline follows suit.
+    expect(state.hintCells).toEqual([at(6, 1)])
+  })
+
+  it('spends a hint even when every cell it names is already marked', () => {
+    // The explanation is the thing being bought, so it is still shown and still
+    // costs — otherwise a player could farm free reasoning off a marked board.
+    const marked = reduce(createGame(SAMPLE_LEVEL), { type: 'tap', index: MARKED })
+    const state = reduce(marked, { ...HINT, cells: [MARKED] })
+    expect(state.hintsLeft).toBe(DEFAULT_HINTS - 1)
+    expect(state.hintMessage).toBe(HINT.message)
+    expect(state.hintCells).toEqual([])
+    expect(state.cells[MARKED]).toBe(CellState.X)
+  })
+
   it('runs out', () => {
     let state = createGame(SAMPLE_LEVEL)
     for (const index of [at(9, 0), at(9, 1), at(9, 3)]) {
-      state = reduce(state, { type: 'hint', index, message: 'no cat here' })
+      state = reduce(state, { ...HINT, cells: [index] })
     }
     expect(state.hintsLeft).toBe(0)
     expect(state.powerUsed).toBe(DEFAULT_HINTS)
-    expect(reduce(state, { type: 'hint', index: BLANK, message: 'no cat here' })).toBe(state)
+    expect(reduce(state, { ...HINT, cells: [BLANK] })).toBe(state)
   })
 
   it('is dismissed without a sound, and only once', () => {
-    const hinted = reduce(createGame(SAMPLE_LEVEL), {
-      type: 'hint',
-      index: BLANK,
-      message: 'no cat here',
-    })
+    const hinted = reduce(createGame(SAMPLE_LEVEL), { ...HINT, cells: [BLANK] })
     const clear = reduce(hinted, { type: 'dismissHint' })
-    expect(clear.hintCell).toBe(-1)
+    expect(clear.hintCells).toEqual([])
+    expect(clear.hintTitle).toBeNull()
     expect(clear.hintMessage).toBeNull()
     expect(clear.eventSeq).toBe(hinted.eventSeq)
     expect(reduce(clear, { type: 'dismissHint' })).toBe(clear)
@@ -465,7 +497,12 @@ describe('saving and restoring', () => {
   const midGame = (): GameState => {
     const start = mixedBoard()
     const revealed = reduce(start, { type: 'reveal' })
-    return reduce(revealed, { type: 'hint', index: BLANK, message: 'no cat here' })
+    return reduce(revealed, {
+      type: 'hint',
+      cells: [BLANK],
+      title: 'One cat per row',
+      message: 'row 8 already has its cat',
+    })
   }
 
   it('round-trips a board in progress', () => {
@@ -563,7 +600,7 @@ describe('purity', () => {
       { type: 'longPress', index: MARKED },
       { type: 'paint', indices: [BLANK, CAT, MARKED], mode: 'mark' },
       { type: 'reveal' },
-      { type: 'hint', index: BLANK, message: 'no cat here' },
+      { type: 'hint', cells: [BLANK], title: 'One cat per row', message: 'no cat here' },
       { type: 'dismissHint' },
       { type: 'settle' },
       { type: 'setAutoX', value: false },

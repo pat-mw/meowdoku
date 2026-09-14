@@ -47,10 +47,14 @@ export type GameState = {
   lastCat: CellIndex
   /** Cell that most recently became a wrong guess, for the shake; -1 when none. */
   lastWrong: CellIndex
-  /** Cell the last hint pointed at, for the gold outline; -1 when none. */
-  hintCell: CellIndex
-  /** The last hint's message, or null. */
+  /** Cells the last hint settled, for the gold outline. Empty when none. */
+  hintCells: readonly CellIndex[]
+  /** The last hint's rule name, or null when no hint is showing. */
+  hintTitle: string | null
+  /** The last hint's explanation, or null when no hint is showing. */
   hintMessage: string | null
+  /** Cells the last hint's rule also settles but deliberately left unmarked. */
+  hintMore: number
   /** Whether a correct cat auto-marks its row, column, region and neighbours. */
   autoX: boolean
   /** Final score, set when the level is won; 0 before that. */
@@ -71,7 +75,7 @@ export type GameAction =
   | { type: 'longPress'; index: CellIndex }
   | { type: 'paint'; indices: readonly CellIndex[]; mode: 'mark' | 'erase' }
   | { type: 'reveal' }
-  | { type: 'hint'; index: CellIndex; message: string }
+  | { type: 'hint'; cells: readonly CellIndex[]; title: string; message: string; more?: number }
   | { type: 'dismissHint' }
   | { type: 'settle' }
   | { type: 'setAutoX'; value: boolean }
@@ -110,8 +114,10 @@ export const createGame = (level: Level, options?: GameOptions): GameState => {
     status: 'playing',
     lastCat: -1,
     lastWrong: -1,
-    hintCell: -1,
+    hintCells: [],
+    hintTitle: null,
     hintMessage: null,
+    hintMore: 0,
     autoX: options?.autoX ?? false,
     score: 0,
     stars: 0,
@@ -372,20 +378,31 @@ const reveal = (state: GameState): GameState => {
   return placeCat(spent, toIndex(state.size, row, col), 'sparkle')
 }
 
-const hint = (state: GameState, index: CellIndex, message: string): GameState => {
+const hint = (
+  state: GameState,
+  indices: readonly CellIndex[],
+  title: string,
+  message: string,
+  more: number,
+): GameState => {
   if (state.hintsLeft <= 0) return state
+  // A rule that settles a whole group of cells marks the whole group: that is
+  // what a player would do having seen it, and making them cross off nine cells
+  // by hand would turn a good hint into a chore.
+  const settled = indices.filter(
+    (index) => inBounds(state, index) && state.cells[index] === CellState.Empty,
+  )
   const patch: Partial<GameState> = {
     hintsLeft: state.hintsLeft - 1,
     powerUsed: state.powerUsed + 1,
-    hintCell: index,
+    hintCells: settled,
+    hintTitle: title,
     hintMessage: message,
+    hintMore: more,
   }
-  // The hint engine only ever points at an empty cell; if it somehow points
-  // elsewhere the explanation is still worth showing, but the board is left
-  // alone rather than having a cat overwritten.
-  if (inBounds(state, index) && state.cells[index] === CellState.Empty) {
+  if (settled.length > 0) {
     const cells = state.cells.slice()
-    cells[index] = CellState.X
+    for (const index of settled) cells[index] = CellState.X
     patch.cells = cells
   }
   return stamped(state, patch, 'pop')
@@ -435,12 +452,12 @@ export const reduce = (state: GameState, action: GameAction): GameState => {
     case 'reveal':
       return reveal(state)
     case 'hint':
-      return hint(state, action.index, action.message)
+      return hint(state, action.cells, action.title, action.message, action.more ?? 0)
     case 'dismissHint': {
-      if (state.hintCell === -1 && state.hintMessage === null) return state
+      if (state.hintCells.length === 0 && state.hintMessage === null) return state
       // Dismissing makes no sound, so no event is stamped and the UI has
       // nothing new to react to.
-      return { ...state, hintCell: -1, hintMessage: null }
+      return { ...state, hintCells: [], hintTitle: null, hintMessage: null, hintMore: 0 }
     }
     case 'setAutoX': {
       if (state.autoX === action.value) return state

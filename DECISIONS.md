@@ -172,3 +172,39 @@ them fails as "not a known audit". They have been dropped from the Lighthouse
 config. Installability is verified instead against the deployed site — manifest,
 icon resolution, iOS head tags and an active service worker — and by the release
 checklist.
+
+## The hint engine reasons rather than points
+
+The first hint engine was a port of the design prototype's: it scanned for a
+single cell and said one line about it, and when nothing matched it fell back on
+"No cat can live here — safe to mark it off", which it produced by reading the
+solution. That last branch was not a hint at all; it was a small reveal with no
+reasoning attached.
+
+The engine now works the way the puzzle does. It derives the deduction chain
+from scratch and reports the next step: which rule applies, every cell that rule
+settles, and why, naming the rows, columns and colours involved. The rules, in
+the order it offers them, are the ones the difficulty model already measures —
+eliminations from a placed cat, a colour pinned to one line, a line served by
+one colour, k colours locked into k lines and its converse, a cell that would
+smother a line, and one-step lookahead as a last resort.
+
+Three choices shape it:
+
+**It does not trust the player's own crosses.** Only placed cats and proven
+wrong guesses are premises. A player who marks a cell by mistake would otherwise
+be told, in confident prose, to cross off the very cell holding a cat. The chain
+is re-derived each time and the first step that settles something the player has
+not already settled is the one reported, so a hint is always both sound and new.
+A property test asserts across forty levels and hundreds of board states that no
+hint ever rules out a cell holding a cat.
+
+**It never points at a cat.** Naming a cell that must hold one is what the
+reveal power-up is for, and what it costs. Every hint eliminates.
+
+**It marks at most twelve cells.** Some rules are enormously productive: on a
+board with one very large region, a line served by a single colour rules out
+every other cell of that colour — measured at up to eighty-four cells, a third
+of a 15x15 grid from one tap. Sound, but it finishes the puzzle rather than
+helping. The engine prefers a rule that fits inside the budget over one that has
+to be trimmed, and says how many more follow the same way.
