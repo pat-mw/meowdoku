@@ -35,7 +35,7 @@ export function InstallCard() {
         <button
           type="button"
           onClick={() => void showInstallPrompt()}
-          className="mt-2.5 w-full rounded-[20px] border-none bg-[var(--mdk-ink)] text-sm font-extrabold text-[#FFF7F0]"
+          className="mt-2.5 w-full rounded-[20px] border-none bg-[var(--mdk-primary)] text-sm font-extrabold text-[var(--mdk-on-primary)]"
           style={{ height: 40 }}
         >
           Install

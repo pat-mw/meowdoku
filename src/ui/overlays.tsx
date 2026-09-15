@@ -44,7 +44,7 @@ export function WinOverlay({
         {lines.map((line) => (
           <div
             key={line.label}
-            className="flex justify-between text-sm font-extrabold text-[#8A6A5A]"
+            className="flex justify-between text-sm font-extrabold text-[var(--mdk-ink-secondary)]"
           >
             <span>{line.label}</span>
             <span>{line.value}</span>
@@ -123,7 +123,7 @@ export function SettingsOverlay({
         <button
           type="button"
           onClick={onExport}
-          className="flex-1 rounded-[22px] border-none bg-[#F3EBE3] text-sm font-extrabold text-[var(--mdk-ink)]"
+          className="flex-1 rounded-[22px] border-none bg-[var(--mdk-surface-sunken)] text-sm font-extrabold text-[var(--mdk-ink)]"
           style={{ height: 44 }}
         >
           Export progress
@@ -131,7 +131,7 @@ export function SettingsOverlay({
         <button
           type="button"
           onClick={onImport}
-          className="flex-1 rounded-[22px] border-none bg-[#F3EBE3] text-sm font-extrabold text-[var(--mdk-ink)]"
+          className="flex-1 rounded-[22px] border-none bg-[var(--mdk-surface-sunken)] text-sm font-extrabold text-[var(--mdk-ink)]"
           style={{ height: 44 }}
         >
           Import

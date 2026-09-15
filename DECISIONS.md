@@ -319,3 +319,29 @@ tuxedo, which vanishes into a dark card, so on the app's own surfaces it becomes
 a warm grey-brown: light enough to show a silhouette, dark enough that the white
 muzzle and eyes still read as white. A board cell keeps its pastel background in
 either theme, so cells scope the cat back to its true colour.
+
+## Text contrast is measured, not chosen
+
+Adding a dark theme exposed that `--mdk-ink` was doing two jobs: the colour of
+text, and the fill of the primary button. That works when ink is dark and the
+button's label is cream, and breaks the moment ink inverts — the dark theme's
+pale rose button carried cream lettering nobody could read. The same mistake sat
+in the Export and Import buttons, whose background was a hard-coded light beige.
+
+Filled controls now have their own tokens — `--mdk-primary` with
+`--mdk-on-primary`, and `--mdk-surface-sunken` for the quieter pair — so a
+colour that has to work as a background is never the same variable as one that
+has to work as text. The primary button keeps its brand colour in both themes;
+it is the one element that should look identical either way.
+
+A contrast test then measured every foreground and background the components
+actually pair, in both themes, and found that several light-theme values had
+never met the bar the product itself sets. Muted copy was at 2.74:1 on cream
+against a stated requirement of 4.5:1; the version line was at 1.63:1 and locked
+level numbers at 1.55:1. All were adjusted by the minimum needed rather than
+restyled.
+
+One documented exception: gold stars on white sit at 1.84:1 and stay there.
+Darkening gold far enough to clear 3:1 turns it olive and stops it reading as
+gold, and the stars never carry information alone — a level tile's accessible
+name states the count and the win overlay prints the score beside them.

@@ -9,20 +9,34 @@
   --mdk-card-locked: #ede4da;
   --mdk-scrim: rgba(74, 48, 38, 0.45);
 
-  /* Ink */
+  /* Ink. These are measured against the surfaces they are used on rather than
+     chosen by eye: body copy clears 4.5:1 and the deliberately quiet inks clear
+     the lower bars recorded in the contrast test. The original values were
+     softer and failed — muted copy sat at 2.74:1 on cream, which is below the
+     product's own 4.5:1 requirement for labels. */
   --mdk-ink: #8a5a5a;
   --mdk-ink-strong: #6b4a3a;
-  --mdk-ink-muted: #b08a7a;
-  --mdk-ink-faint: #d8c8bc;
-  --mdk-ink-locked: #c7b7a6;
+  --mdk-ink-muted: #806557;
+  --mdk-ink-faint: #a3978e;
+  --mdk-ink-locked: #9c9082;
   --mdk-ink-pictogram: #4a3a35;
+
+  /* Actions. The primary button is a filled brand-coloured pill, so it needs
+     its own background and its own text colour: --mdk-ink is the colour of
+     *text* and inverts between themes, which makes it unusable as a fill. */
+  --mdk-primary: #8a5a5a;
+  --mdk-on-primary: #fff7f0;
+  /* A quieter filled control, sunk into a card rather than raised off it. */
+  --mdk-surface-sunken: #f3ebe3;
+  /* Body copy that should sit below the headline without disappearing. */
+  --mdk-ink-secondary: #8a6a5a;
 
   /* Accents */
   --mdk-gold: #e8b93a;
   --mdk-green: #4e9a5f;
   --mdk-coral: #e5613d;
   --mdk-danger-bg: #fbede8;
-  --mdk-danger-ink: #c94f2e;
+  --mdk-danger-ink: #b9492a;
   --mdk-toggle-off: #dcd2c6;
 
   /* Mascots */

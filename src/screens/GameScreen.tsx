@@ -90,7 +90,7 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
         <button
           type="button"
           onClick={() => void openLevel(levelNumber)}
-          className="rounded-full border-none bg-[var(--mdk-ink)] px-5 py-2.5 text-sm font-extrabold text-[#FFF7F0]"
+          className="rounded-full border-none bg-[var(--mdk-primary)] px-5 py-2.5 text-sm font-extrabold text-[var(--mdk-on-primary)]"
         >
           Try again
         </button>

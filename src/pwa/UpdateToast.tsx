@@ -28,7 +28,7 @@ export function UpdateToast({ deferred }: { deferred: boolean }) {
       <button
         type="button"
         onClick={applyUpdate}
-        className="rounded-full border-none bg-[var(--mdk-ink)] px-3.5 py-1.5 text-[13px] font-extrabold text-[#FFF7F0]"
+        className="rounded-full border-none bg-[var(--mdk-primary)] px-3.5 py-1.5 text-[13px] font-extrabold text-[var(--mdk-on-primary)]"
       >
         Reload
       </button>

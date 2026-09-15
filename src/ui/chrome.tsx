@@ -78,7 +78,7 @@ export function PrimaryButton({
     <button
       type="button"
       onClick={onClick}
-      className={`h-13 w-full rounded-[26px] border-none bg-[var(--mdk-ink)] text-[17px] font-extrabold text-[#FFF7F0] ${className}`}
+      className={`h-13 w-full rounded-[26px] border-none bg-[var(--mdk-primary)] text-[17px] font-extrabold text-[var(--mdk-on-primary)] ${className}`}
       style={{ height: 52, boxShadow: 'var(--mdk-shadow-primary)' }}
     >
       {children}

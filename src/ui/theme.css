@@ -34,11 +34,23 @@
   --mdk-dark-card-locked: #231d1a;
   --mdk-dark-scrim: rgba(0, 0, 0, 0.62);
 
+  /* The primary button keeps its brand colour in both themes — it is the one
+     element that should look identical — lifted just enough to separate from a
+     dark card. Its text stays the same warm cream, so the pairing that carries
+     the brand never has to be re-proven. */
+  --mdk-dark-primary: #976363;
+  --mdk-dark-surface-sunken: #372e29;
+
   --mdk-dark-ink: #e6b8ae;
+  --mdk-dark-ink-secondary: #c9ada1;
   --mdk-dark-ink-strong: #f2e6de;
   --mdk-dark-ink-muted: #b2948a;
-  --mdk-dark-ink-faint: #6d5a51;
-  --mdk-dark-ink-locked: #574840;
+  /* Both of these are deliberately quiet, but on a dark surface the light
+     theme's values fall below readable. Lifted to stay muted without vanishing:
+     the faint ink carries the version and storage line, and the locked ink
+     carries level numbers a player still needs to read. */
+  --mdk-dark-ink-faint: #8a7469;
+  --mdk-dark-ink-locked: #6e5c52;
   --mdk-dark-ink-pictogram: #e8dcd2;
 
   /* The accents keep their hue but lift slightly, because the same saturation
@@ -74,6 +86,10 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
+    --mdk-primary: var(--mdk-dark-primary);
+    --mdk-surface-sunken: var(--mdk-dark-surface-sunken);
+    --mdk-ink-secondary: var(--mdk-dark-ink-secondary);
+
     --mdk-cat-ink: var(--mdk-dark-cat-ink);
 
     --mdk-bg: var(--mdk-dark-bg);
@@ -108,6 +124,10 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+
+  --mdk-primary: var(--mdk-dark-primary);
+  --mdk-surface-sunken: var(--mdk-dark-surface-sunken);
+  --mdk-ink-secondary: var(--mdk-dark-ink-secondary);
 
   --mdk-cat-ink: var(--mdk-dark-cat-ink);
 
