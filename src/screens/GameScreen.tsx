@@ -158,11 +158,12 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
         </Pill>
       </div>
 
-      {/* Small boards keep the rules between the pills and the grid, where the
-          approved layout puts them. A large board needs that height for the
-          grid itself, so the same strip moves below the toolbar instead — see
-          the copy rendered after the power-up buttons. */}
-      {large ? null : <RulesStrip />}
+      {/* The rules sit between the pills and the grid at every board size. They
+          were once collapsed to a single line on large boards, on the assumption
+          that a 15x15 grid needed the height — it does not. The board is
+          width-constrained, so the strip costs the grid nothing, and the layout
+          suite measures that on the tightest phones the game targets. */}
+      <RulesStrip />
 
       {/* Keyed by size so a level of a different size gets a fresh transform
           rather than inheriting the last board's pan and zoom. */}
@@ -200,11 +201,6 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
           <Bulb className="h-[37px] w-[30px]" />
         </PowerButton>
       </div>
-
-      {/* The large-board home for the rules. Every board size gets the full
-          pictograms; only their position changes, because the space under the
-          toolbar is empty exactly when the space above the board is not. */}
-      {large ? <RulesStrip /> : null}
 
       {game.hintMessage && game.hintTitle ? (
         <HintToast

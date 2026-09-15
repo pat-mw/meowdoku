@@ -2,12 +2,12 @@ import { expect, test, type Page } from '@playwright/test'
 import { seedUnlockedTo } from './helpers'
 
 /**
- * The rules strip shows its three pictograms on every board size, so the only
- * question a test can settle is whether the screen still fits a phone. The two
- * viewports below are the tightest the game targets: a 390x844 iPhone 13 and a
- * 360x800 Android. The board is the thing a player cannot scroll to find mid
- * gesture, so it must sit entirely inside the viewport; the strip has to be
- * fully on screen too, or moving it would have bought nothing.
+ * The rules strip shows its three pictograms in one fixed place on every board
+ * size, so what a test has to settle is whether that still fits a phone at the
+ * largest board. The two viewports below are the tightest the game targets: a
+ * 390x844 iPhone 13 and a 360x800 Android. The board is the thing a player
+ * cannot scroll to find mid-gesture, so it must sit entirely inside the
+ * viewport, with the strip above it and also fully on screen.
  */
 
 /** Grandmaster tier: always 15x15, the largest board the game produces. */
@@ -24,13 +24,15 @@ const viewportOf = (page: Page) =>
     width: window.innerWidth,
     height: window.innerHeight,
     scrollY: window.scrollY,
+    /** Taller than the viewport means something below the fold needs scrolling to. */
+    documentHeight: document.documentElement.scrollHeight,
   }))
 
 for (const phone of PHONES) {
   test.describe(`a 15x15 board on a ${phone.name}`, () => {
     test.use({ viewport: { width: phone.width, height: phone.height } })
 
-    test('shows the full rules strip with the board entirely on screen', async ({ page }) => {
+    test('keeps the full rules strip above the board, all on screen', async ({ page }) => {
       await seedUnlockedTo(page, LARGEST_BOARD_LEVEL)
       await page.goto(`/play/${LARGEST_BOARD_LEVEL}`)
       const board = page.getByRole('grid', { name: 'Puzzle board, 15 by 15' })
@@ -46,6 +48,10 @@ for (const phone of PHONES) {
 
       const viewport = await viewportOf(page)
       expect(viewport.scrollY).toBe(0)
+      // The whole screen has to fit, not only the two boxes measured below: the
+      // power-up toolbar sits under the board and must not push the page into a
+      // scroll the player would have to fight mid-gesture.
+      expect(viewport.documentHeight).toBeLessThanOrEqual(viewport.height)
       const boardBox = await board.boundingBox()
       const rulesBox = await rules.boundingBox()
       if (!boardBox || !rulesBox) throw new Error('the board and the rules must both be laid out')
@@ -63,6 +69,11 @@ for (const phone of PHONES) {
       expect(boardBox.x + boardBox.width).toBeLessThanOrEqual(viewport.width)
       expect(rulesBox.y).toBeGreaterThanOrEqual(0)
       expect(rulesBox.y + rulesBox.height).toBeLessThanOrEqual(viewport.height)
+      // The rules belong between the pills and the grid at every board size. An
+      // earlier version moved them below the board on large ones to buy height
+      // the board turned out not to need, which made the screen rearrange itself
+      // as the player climbed the tiers.
+      expect(rulesBox.y + rulesBox.height).toBeLessThanOrEqual(boardBox.y)
     })
   })
 }
