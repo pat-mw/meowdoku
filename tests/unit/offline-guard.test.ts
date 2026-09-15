@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import ts from 'typescript'
 
 /**
@@ -14,11 +15,16 @@ import ts from 'typescript'
  * just makes the install quietly bigger. None of it shows up in a typecheck, a
  * lint or a passing screen test, so it is checked mechanically instead.
  *
- * The import-graph test is the important one and it is a real graph walk: the
- * TypeScript parser reads every module reachable from `src/main.tsx` by a
- * *static* import, following the same edges the bundler will. Grepping for an
- * import line would miss the case that actually happens — module A is clean,
- * but it imports B, which imports the party client.
+ * Two of these assertions are graph walks rather than pattern matches, and that
+ * is deliberate. The eager walk parses every module reachable from
+ * `src/main.tsx` by a *static* import, following the same edges the bundler
+ * will, because grepping for an import line would miss the case that actually
+ * happens: module A is clean, but it imports B, which imports the party client.
+ * The built-output walk identifies multiplayer code in the emitted bundle by
+ * strings lifted out of the multiplayer sources, because matching a filename
+ * convention only proves the convention — a guard that greps for
+ * `multiplayer-*.js` passes just as happily when the chunk has been renamed to
+ * something else and precached in full.
  */
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -37,22 +43,43 @@ const viteConfig = (await import(
 )) as {
   MULTIPLAYER_CHUNK_NAME: string
   EAGER_MULTIPLAYER_MODULE: string
-  MULTIPLAYER_MODULE_TEST: RegExp
+  MULTIPLAYER_ENTRY: string
+  APP_ENTRY: string
+  featureOwnedModules: (graph: {
+    entries: readonly string[]
+    featureEntries: readonly string[]
+    staticImportsOf: (id: string) => readonly string[]
+    allImportsOf: (id: string) => readonly string[]
+  }) => ReadonlySet<string>
   workboxOptions: Record<string, unknown>
 }
 
 const {
   MULTIPLAYER_CHUNK_NAME,
   EAGER_MULTIPLAYER_MODULE,
-  MULTIPLAYER_MODULE_TEST,
+  MULTIPLAYER_ENTRY,
+  APP_ENTRY,
+  featureOwnedModules,
   workboxOptions,
 } = viteConfig
 
 /** Repo-relative, forward-slashed, so assertions read the same on any platform. */
 const rel = (file: string): string => relative(ROOT, file).split('\\').join('/')
 
+/**
+ * Every place multiplayer source lives. Used only to check what the *eager*
+ * graph reaches — what the build owns is decided by walking the module graph,
+ * not by these paths, precisely so that a file moving between them cannot
+ * change what gets precached.
+ */
+const MULTIPLAYER_DIRECTORIES = [
+  'src/multiplayer/',
+  'src/screens/multiplayer/',
+  'src/ui/multiplayer/',
+] as const
+
 const isMultiplayerModule = (path: string): boolean =>
-  path.startsWith('src/multiplayer/') || path.startsWith('src/screens/Multiplayer')
+  path === MULTIPLAYER_ENTRY || MULTIPLAYER_DIRECTORIES.some((dir) => path.startsWith(dir))
 
 type ModuleEdges = {
   /** Specifiers that survive compilation and become real bundler edges. */
@@ -64,6 +91,15 @@ type ModuleEdges = {
 const scriptKindOf = (file: string): ts.ScriptKind =>
   file.endsWith('.tsx') || file.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
 
+const parse = (file: string): ts.SourceFile =>
+  ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    scriptKindOf(file),
+  )
+
 /**
  * The import edges of one module.
  *
@@ -72,13 +108,7 @@ const scriptKindOf = (file: string): ts.ScriptKind =>
  * `import { type A, b }` is kept, because that statement does survive.
  */
 const edgesOf = (file: string): ModuleEdges => {
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(file, 'utf8'),
-    ts.ScriptTarget.ESNext,
-    true,
-    scriptKindOf(file),
-  )
+  const source = parse(file)
   const eager: string[] = []
   const deferred: string[] = []
 
@@ -187,31 +217,129 @@ describe('the multiplayer chunk stays out of the main bundle', () => {
     const deferred = (shell?.deferred ?? []).map((specifier) =>
       rel(resolveRelative(ROUTE_SHELL, specifier)),
     )
-    expect(deferred.some(isMultiplayerModule)).toBe(true)
+    expect(deferred).toContain(MULTIPLAYER_ENTRY)
+  })
+})
+
+describe('ownership is derived from the module graph, not from a path pattern', () => {
+  /**
+   * A miniature of this repo's real shape: the entry, the route shell that
+   * holds the one dynamic import, the connectivity probe the home screen loads
+   * eagerly, feature modules spread across three differently-cased directories,
+   * the socket library, and shared code reached from both sides.
+   *
+   * The differently-cased directories are the whole point. The rule this
+   * exercises replaced a path pattern that recognised `src/multiplayer/` and
+   * `src/screens/Multiplayer` and nothing else, so `src/screens/multiplayer/`
+   * and `src/ui/multiplayer/` went unowned, the chunk lost its name, and the
+   * service worker precached the feature for every single-player install.
+   */
+  const SYNTHETIC: Record<string, { static?: string[]; dynamic?: string[] }> = {
+    'src/main.tsx': { static: ['src/routeTree.gen.ts'] },
+    'src/routeTree.gen.ts': { static: ['src/routes/multiplayer.tsx', 'src/routes/index.tsx'] },
+    'src/routes/index.tsx': { static: ['src/screens/HomeScreen.tsx'] },
+    'src/screens/HomeScreen.tsx': { static: ['src/multiplayer/connection.ts', 'src/ui/Board.tsx'] },
+    'src/multiplayer/connection.ts': {},
+    'src/routes/multiplayer.tsx': {
+      static: ['src/ui/chrome.tsx'],
+      dynamic: ['src/screens/MultiplayerScreen.tsx'],
+    },
+    'src/screens/MultiplayerScreen.tsx': {
+      static: ['src/screens/multiplayer/RoomScreen.tsx', 'src/multiplayer/store.ts'],
+    },
+    'src/screens/multiplayer/RoomScreen.tsx': {
+      static: ['src/ui/multiplayer/ProgressRace.tsx', 'src/ui/Board.tsx'],
+    },
+    'src/ui/multiplayer/ProgressRace.tsx': { static: ['src/board/rules.ts'] },
+    'src/multiplayer/store.ts': {
+      static: ['src/multiplayer/client.ts', 'src/multiplayer/match.ts'],
+    },
+    'src/multiplayer/client.ts': { static: ['node_modules/partysocket/dist/index.js'] },
+    'src/multiplayer/match.ts': {},
+    'node_modules/partysocket/dist/index.js': {},
+    'src/ui/Board.tsx': { static: ['src/board/rules.ts'] },
+    'src/ui/chrome.tsx': {},
+    'src/board/rules.ts': {},
+  }
+
+  const owned = featureOwnedModules({
+    entries: ['src/main.tsx'],
+    featureEntries: ['src/screens/MultiplayerScreen.tsx'],
+    staticImportsOf: (id) => SYNTHETIC[id]?.static ?? [],
+    allImportsOf: (id) => [...(SYNTHETIC[id]?.static ?? []), ...(SYNTHETIC[id]?.dynamic ?? [])],
   })
 
-  it('recognises a multiplayer module by its path, and only a multiplayer one', () => {
-    // This is the predicate the build uses to decide what counts as a
-    // multiplayer chunk, and therefore what the service worker leaves alone.
-    // Every file it names is here so that a move — screens into a folder, a
-    // second socket package — fails loudly rather than silently widening or
-    // narrowing the precache.
-    const owned = (path: string): boolean => MULTIPLAYER_MODULE_TEST.test(`/${path}`)
+  it('owns every module the feature reaches, in whatever directory', () => {
+    expect([...owned].sort()).toEqual([
+      'node_modules/partysocket/dist/index.js',
+      'src/multiplayer/client.ts',
+      'src/multiplayer/match.ts',
+      'src/multiplayer/store.ts',
+      'src/screens/MultiplayerScreen.tsx',
+      'src/screens/multiplayer/RoomScreen.tsx',
+      'src/ui/multiplayer/ProgressRace.tsx',
+    ])
+  })
 
-    expect(owned('src/multiplayer/protocol.ts')).toBe(true)
-    expect(owned('src/multiplayer/match.ts')).toBe(true)
-    expect(owned(EAGER_MULTIPLAYER_MODULE)).toBe(true)
-    expect(owned('src/screens/MultiplayerScreen.tsx')).toBe(true)
-    expect(owned('node_modules/.pnpm/partysocket@1.3.0/node_modules/partysocket/dist/index.js')) //
-      .toBe(true)
+  it('leaves shared code and the eager probe to the main chunk', () => {
+    // A chunk containing any of these is one the main bundle depends on, and
+    // naming it `multiplayer-*` would exclude the main bundle's own dependency
+    // from the precache — an install that cannot start offline.
+    expect(owned.has('src/board/rules.ts')).toBe(false)
+    expect(owned.has('src/ui/Board.tsx')).toBe(false)
+    expect(owned.has('src/ui/chrome.tsx')).toBe(false)
+    expect(owned.has(EAGER_MULTIPLAYER_MODULE)).toBe(false)
+    expect(owned.has(APP_ENTRY)).toBe(false)
+  })
 
-    // Shared code must stay shared. A chunk containing any of these is one the
-    // main bundle depends on, and naming it `multiplayer-*` would exclude the
-    // main bundle's own dependency from the precache.
-    expect(owned('src/board/reducer.ts')).toBe(false)
-    expect(owned('src/store/useGameStore.ts')).toBe(false)
-    expect(owned('src/ui/Board.tsx')).toBe(false)
-    expect(owned('src/screens/GameScreen.tsx')).toBe(false)
+  it('stops owning a module the moment the main bundle reaches it', () => {
+    // The rule is subtraction, so a single new static import from the eager
+    // side has to hand the module back rather than leave two copies of it.
+    const captured = featureOwnedModules({
+      entries: ['src/main.tsx'],
+      featureEntries: ['src/screens/MultiplayerScreen.tsx'],
+      staticImportsOf: (id) =>
+        id === 'src/screens/HomeScreen.tsx'
+          ? [...(SYNTHETIC[id]?.static ?? []), 'src/multiplayer/store.ts']
+          : (SYNTHETIC[id]?.static ?? []),
+      allImportsOf: (id) => [...(SYNTHETIC[id]?.static ?? []), ...(SYNTHETIC[id]?.dynamic ?? [])],
+    })
+
+    expect(captured.has('src/multiplayer/store.ts')).toBe(false)
+    // And everything below it, which the main bundle now also has.
+    expect(captured.has('node_modules/partysocket/dist/index.js')).toBe(false)
+  })
+
+  it('names a lazy entry point that exists and is the one the route imports', () => {
+    // The build throws when this file is missing, but only at build time. Here
+    // it fails in the unit suite, where a rename is being made.
+    expect(existsSync(resolve(ROOT, MULTIPLAYER_ENTRY))).toBe(true)
+    expect(existsSync(resolve(ROOT, APP_ENTRY))).toBe(true)
+  })
+
+  it('covers all three real multiplayer directories from that entry point', () => {
+    // The synthetic graph above is only worth something if the real feature has
+    // the shape it models. Walking the actual sources from the lazy entry must
+    // reach code in every directory multiplayer occupies.
+    const reached = new Set<string>()
+    const queue = [resolve(ROOT, MULTIPLAYER_ENTRY)]
+    while (queue.length > 0) {
+      const file = queue.pop()
+      if (file === undefined || reached.has(file) || !PARSEABLE.test(file)) continue
+      reached.add(file)
+      const edges = edgesOf(file)
+      for (const specifier of [...edges.eager, ...edges.deferred]) {
+        if (specifier.startsWith('.')) queue.push(resolveRelative(file, specifier))
+      }
+    }
+
+    const paths = [...reached].map(rel)
+    for (const directory of MULTIPLAYER_DIRECTORIES) {
+      expect(
+        paths.some((path) => path.startsWith(directory)),
+        `nothing under ${directory} is reachable from ${MULTIPLAYER_ENTRY}`,
+      ).toBe(true)
+    }
   })
 })
 
@@ -240,10 +368,9 @@ describe('the service worker ignores the party origin', () => {
     expect(foreign).toEqual([])
   })
 
-  it('leaves the multiplayer chunk out of the precache manifest', () => {
-    // Precaching it would hand every single-player install a copy of code it
-    // will never run — the same mistake as bundling it, deferred by a few
-    // seconds of background download.
+  it('excludes the multiplayer chunk name from the precache glob', () => {
+    // This only states the intent. Whether the intent was carried out is a
+    // question about the emitted files, and is answered below by reading them.
     expect(workboxOptions['globIgnores']).toContain(`**/${MULTIPLAYER_CHUNK_NAME}-*.js`)
   })
 })
@@ -330,24 +457,191 @@ const DIST = resolve(ROOT, 'dist')
 const built = existsSync(resolve(DIST, 'index.html')) && existsSync(resolve(DIST, 'sw.js'))
 
 describe.skipIf(!built)('the built output', () => {
-  const chunkPrefix = `${MULTIPLAYER_CHUNK_NAME}-`
+  /**
+   * Every file the service worker will download and keep, read out of the
+   * generated worker rather than predicted from the glob patterns.
+   */
+  const precachedUrls = (): string[] => {
+    const serviceWorker = readFileSync(resolve(DIST, 'sw.js'), 'utf8')
+    return [...serviceWorker.matchAll(/\{\s*url\s*:\s*"([^"]+)"/g)].flatMap((match) =>
+      match[1] === undefined ? [] : [match[1]],
+    )
+  }
 
-  it('emits one multiplayer chunk', () => {
-    const assets = readdirSync(resolve(DIST, 'assets'))
-    const chunks = assets.filter((name) => name.startsWith(chunkPrefix) && name.endsWith('.js'))
-    expect(chunks.length).toBe(1)
+  const gzipped = (file: string): number => gzipSync(readFileSync(file)).length
+
+  const distFiles = (): string[] => {
+    const walk = (directory: string): string[] =>
+      readdirSync(directory).flatMap((name) => {
+        const path = join(directory, name)
+        return statSync(path).isDirectory() ? walk(path) : [path]
+      })
+    return walk(DIST).map((path) => relative(DIST, path).split('\\').join('/'))
+  }
+
+  /**
+   * String literals that occur in multiplayer source and nowhere else.
+   *
+   * This is how a chunk is identified as containing multiplayer code without
+   * trusting its name — which is the only identification worth making, because
+   * the name is exactly what broke last time. String data survives
+   * minification: class lists, copy and cue names come out of the bundler
+   * intact even though every identifier around them has been renamed.
+   *
+   * Module specifiers are skipped because the bundler rewrites or erases them,
+   * and the connectivity probe is skipped because it is deliberately part of
+   * the main chunk.
+   */
+  const signaturesByFile = (): Map<string, string[]> => {
+    const sources = (directory: string): string[] => {
+      const full = resolve(ROOT, directory)
+      if (!existsSync(full)) return []
+      return readdirSync(full).flatMap((name) => {
+        const path = join(full, name)
+        if (statSync(path).isDirectory()) return sources(join(directory, name))
+        return PARSEABLE.test(path) ? [rel(path)] : []
+      })
+    }
+
+    const multiplayerFiles = [
+      MULTIPLAYER_ENTRY,
+      ...MULTIPLAYER_DIRECTORIES.flatMap((directory) => sources(directory)),
+    ].filter((path) => path !== EAGER_MULTIPLAYER_MODULE)
+
+    const otherSources = [...sources('src'), ...sources('party')]
+      .filter((path) => !multiplayerFiles.includes(path))
+      .map((path) => readFileSync(resolve(ROOT, path), 'utf8'))
+      .join('\n')
+
+    const literalsOf = (file: string): string[] => {
+      const found: string[] = []
+      const visit = (node: ts.Node): void => {
+        // Import and export statements hold only module specifiers, which the
+        // bundler rewrites or erases, so nothing under them survives as data.
+        if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return
+        if (
+          (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+          node.text.length >= 20
+        ) {
+          found.push(node.text)
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(parse(resolve(ROOT, file)))
+      return found
+    }
+
+    const byFile = new Map<string, string[]>()
+    for (const file of multiplayerFiles) {
+      const unique = [...new Set(literalsOf(file))].filter(
+        (literal) => !otherSources.includes(literal),
+      )
+      if (unique.length > 0) byFile.set(file, unique)
+    }
+    return byFile
+  }
+
+  const signatures = signaturesByFile()
+  const allSignatures = [...signatures.values()].flat()
+
+  /** Emitted scripts, mapped to whether they carry any multiplayer code. */
+  const scripts = distFiles()
+    .filter((path) => path.endsWith('.js'))
+    .map((path) => {
+      const text = readFileSync(resolve(DIST, path), 'utf8')
+      return { path, carries: allSignatures.filter((signature) => text.includes(signature)) }
+    })
+
+  it('has signatures that actually identify the emitted feature code', () => {
+    // Without this, every assertion below passes on an empty signature set —
+    // the same vacuous pass that let a renamed chunk sit in the precache
+    // manifest unnoticed. Both files named here are ones a path pattern once
+    // failed to recognise.
+    expect(signatures.size).toBeGreaterThanOrEqual(8)
+    expect([...signatures.keys()]).toContain('src/screens/multiplayer/RoomScreen.tsx')
+    expect([...signatures.keys()]).toContain('src/ui/multiplayer/ProgressRace.tsx')
+
+    const located = new Set(
+      scripts.flatMap((script) => (script.carries.length > 0 ? script.carries : [])),
+    )
+    const missing = [...signatures.keys()].filter((file) =>
+      (signatures.get(file) ?? []).every((signature) => !located.has(signature)),
+    )
+    expect(missing, 'multiplayer source that no emitted script contains').toEqual([])
+
+    expect(precachedUrls().length).toBeGreaterThan(10)
   })
 
-  it('does not preload it from the document', () => {
+  it('precaches no script containing multiplayer code', () => {
+    // The assertion that matters, and the one stated positively: not "no file
+    // called multiplayer-* is precached" but "nothing the service worker
+    // downloads contains the feature". A rename, a lost chunk name or a stray
+    // import all fail here, because none of them changes what the bytes say.
+    const precached = new Set(precachedUrls())
+    const offenders = scripts
+      .filter((script) => script.carries.length > 0 && precached.has(script.path))
+      .map((script) => `${script.path} (${script.carries.length} multiplayer strings)`)
+    expect(offenders).toEqual([])
+  })
+
+  it('keeps the feature in one chunk that is fetched on demand', () => {
+    const carriers = scripts.filter((script) => script.carries.length > 0).map((s) => s.path)
+    expect(carriers.length).toBe(1)
+    expect(carriers[0]).toMatch(
+      new RegExp(`^assets/${MULTIPLAYER_CHUNK_NAME}-[A-Za-z0-9_-]+\\.js$`),
+    )
+
     // Vite writes a modulepreload link for every chunk the entry statically
     // depends on. The multiplayer chunk appearing there would mean something
     // eager reached it, whatever the import graph said.
     const html = readFileSync(resolve(DIST, 'index.html'), 'utf8')
-    expect(html).not.toContain(chunkPrefix)
+    expect(html).not.toContain(carriers[0] ?? 'assets/')
   })
 
-  it('does not precache it', () => {
-    const serviceWorker = readFileSync(resolve(DIST, 'sw.js'), 'utf8')
-    expect(serviceWorker).not.toContain(chunkPrefix)
+  it('keeps the main chunk inside its budget', () => {
+    const main = distFiles().filter((path) => /^assets\/index-[^/]+\.js$/.test(path))
+    expect(main.length).toBe(1)
+    const size = gzipped(resolve(DIST, main[0] ?? ''))
+
+    // The budget for the script every install downloads is 150 kB gzipped.
+    expect(size).toBeLessThanOrEqual(150 * 1024)
+    // Measured at 124,587 bytes gzipped. The tighter bound is the one that
+    // notices multiplayer leaking back in: the whole feature is 28,521 bytes
+    // gzipped, so even a fraction of it returning would clear the budget above
+    // and still be a regression worth stopping.
+    expect(size).toBeLessThanOrEqual(132 * 1024)
+  })
+
+  it('keeps the single stylesheet small enough that not splitting it is fine', () => {
+    // `cssCodeSplit` is off and one sheet is emitted, so the multiplayer-only
+    // Tailwind utilities are downloaded by every install. Splitting would not
+    // help: Tailwind compiles the whole scanned utility surface into the one
+    // sheet `src/main.tsx` imports, and turning code splitting on emits the
+    // same bytes under a different name. Measured, the multiplayer-only rules
+    // are 4,242 bytes raw and ~740 gzipped of a 7,862-byte sheet — smaller than
+    // the round trip a second stylesheet would cost. This cap is what stops
+    // "negligible" quietly becoming untrue.
+    const sheets = distFiles().filter((path) => path.endsWith('.css'))
+    expect(sheets.length).toBe(1)
+    expect(gzipped(resolve(DIST, sheets[0] ?? ''))).toBeLessThanOrEqual(9 * 1024)
+  })
+
+  it('keeps the precache small enough to install over a bad connection', () => {
+    const urls = precachedUrls()
+    const present = new Set(distFiles())
+    for (const url of urls) {
+      expect(present.has(url), `${url} is precached but was not emitted`).toBe(true)
+    }
+
+    // 16 entries, of which the three icons are listed twice — once from the glob
+    // and once from the web app manifest — so the download is 13 distinct files
+    // and 581,658 bytes. Fonts and icons are most of it; the multiplayer chunk
+    // that used to be here was another 87,877. The cap leaves less headroom than
+    // that chunk, so its return cannot pass unnoticed.
+    const total = [...new Set(urls)].reduce(
+      (sum, url) => sum + statSync(resolve(DIST, url)).size,
+      0,
+    )
+    expect(total).toBeLessThanOrEqual(600 * 1024)
   })
 })

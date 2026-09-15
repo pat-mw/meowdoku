@@ -147,6 +147,23 @@ const roomState = (overrides: Partial<RoomState> = {}): RoomState => ({
   ...overrides,
 })
 
+/**
+ * The seat token a room issues in its welcome.
+ *
+ * Deliberately unlike the player id in the same frame: the id is public and
+ * grants nothing, the token is the secret that resumes the seat, and a client
+ * that confused the two would hand the wrong one back on a reconnect.
+ */
+const SEAT_TOKEN = 'seat-6f1c2b'
+
+const welcome = (token: string = SEAT_TOKEN): ServerMessage => ({
+  t: 'welcome',
+  v: PROTOCOL_VERSION,
+  you: 'p1',
+  token,
+  state: roomState(),
+})
+
 /** A client wired to the fake socket, with the heartbeat and backoff out of the way. */
 const connect = async (
   options: Partial<Parameters<typeof createPartyClient>[0]> = {},
@@ -219,7 +236,7 @@ describe('createPartyClient', () => {
     // the player can act on.
     expect(client.status()).toBe('connecting')
 
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
     expect(client.status()).toBe('connected')
     expect(events.filter((event) => event.kind === 'status').at(-1)).toEqual({
       kind: 'status',
@@ -241,7 +258,7 @@ describe('createPartyClient', () => {
     const { client, events } = await connect()
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     expect(client.send({ t: 'progress', cats: 3 })).toBe(true)
     expect(FakeSocket.latest.framesOfType('progress')).toEqual([{ t: 'progress', cats: 3 }])
@@ -276,7 +293,7 @@ describe('createPartyClient', () => {
     const { client, events } = await connect()
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     const first = FakeSocket.latest
     first.serverClose(1006, 'dropped')
@@ -288,12 +305,14 @@ describe('createPartyClient', () => {
     expect(second).not.toBe(first)
 
     second.open()
-    // Resuming, not restarting: the same session id and the same name, so the
-    // server hands the player back their seat.
-    expect(new URL(second.url).searchParams.get('_pk')).toBe('session-1')
-    expect(second.framesOfType('join')).toEqual([{ t: 'join', v: PROTOCOL_VERSION, name: 'Pat' }])
+    // Resuming, not restarting. The seat token from the first welcome is what
+    // does it: the room has no other way to tell this socket from a stranger's,
+    // and the player id it broadcast to everybody must not be usable here.
+    expect(second.framesOfType('join')).toEqual([
+      { t: 'join', v: PROTOCOL_VERSION, name: 'Pat', token: SEAT_TOKEN },
+    ])
 
-    second.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    second.deliver(welcome())
     expect(client.status()).toBe('connected')
     const statuses = events.filter((event) => event.kind === 'status').map((event) => event.status)
     expect(statuses).toContain('reconnecting')
@@ -303,7 +322,7 @@ describe('createPartyClient', () => {
     const { client } = await connect()
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     FakeSocket.latest.serverClose(1000, 'going away')
     await flush()
@@ -317,7 +336,7 @@ describe('createPartyClient', () => {
     const { client } = await connect({ retry: { maxAttempts: 2, minDelayMs: 0, maxDelayMs: 0 } })
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     for (let attempt = 0; attempt < 4; attempt++) {
       FakeSocket.latest.serverClose(1006)
@@ -385,7 +404,7 @@ describe('createPartyClient', () => {
     const { client } = await connect()
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
     FakeSocket.latest.serverClose(CLOSE_REJECTED, 'left')
     await flush(2)
     expect(client.status()).toBe('disconnected')
@@ -397,7 +416,7 @@ describe('createPartyClient', () => {
     const { client } = await connect()
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     const socket = FakeSocket.latest
     client.close({ leave: true })
@@ -428,7 +447,7 @@ describe('createPartyClient', () => {
     const { client } = await connect({ heartbeatMs: 10, now: () => clock })
     track(client)
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
 
     await wait(40)
     expect(FakeSocket.latest.framesOfType('ping').length).toBeGreaterThan(0)
@@ -461,7 +480,7 @@ describe('createPartyClient', () => {
     const stop = client.subscribe((event) => seen.push(event))
     stop()
     FakeSocket.latest.open()
-    FakeSocket.latest.deliver({ t: 'welcome', v: PROTOCOL_VERSION, you: 'p1', state: roomState() })
+    FakeSocket.latest.deliver(welcome())
     expect(seen).toHaveLength(0)
   })
 })

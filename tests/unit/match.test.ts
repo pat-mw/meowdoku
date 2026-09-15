@@ -28,7 +28,6 @@ import {
   matchPodium,
   matchSchedule,
   playerLevelIndex,
-  rankFinishes,
   resolveLevel,
   solutionMatches,
   standingFor,
@@ -241,6 +240,70 @@ describe('blaze', () => {
     expect(matchEndReason(state, matchDeadlineAt(state))).toBe('deadline')
   })
 
+  it('ranks a player who played the schedule out above one who solved nothing', () => {
+    // Two players run the whole schedule while a third solves none of it, then
+    // both finishers press "leave the match" rather than sit on a finished
+    // board until the match deadline. Finishing is a state of its own, so
+    // leaving afterwards forfeits nothing.
+    let state = startMatch(blaze(5), ['a', 'b', 'c'])
+    for (let level = 0; level < 5; level++) {
+      state = solve(state, 'a', 1000)
+      state = solve(state, 'b', 2000)
+    }
+    expect(state.participants.find((p) => p.id === 'a')?.exit).toBe('completed')
+    expect(canAcceptFinish(state, 'a', 5)).toBe(false)
+
+    state = applyLeave(state, 'a')
+    state = applyLeave(state, 'b')
+    expect(state.participants.find((p) => p.id === 'a')?.exit).toBe('completed')
+
+    // c is still racing two banked times, so the match is not over — and it is
+    // certainly not c's.
+    expect(matchEndReason(state, T0 + COUNTDOWN_MS)).toBeNull()
+    expect(matchEndReason(state, matchDeadlineAt(state))).toBe('deadline')
+
+    state = finishMatch(state)
+    expect(places(state)).toEqual(['a', 'b', 'c'])
+    const podium = matchPodium(state)
+    expect(championOf(podium)).toBe('a')
+    expect(podium.map((entry) => entry.status)).toEqual(['champion', 'finished', 'finished'])
+    expect(podium[2]?.levelsSolved).toBe(0)
+  })
+
+  it('does not hand a two-player race to the straggler when the finisher leaves', () => {
+    let state = startMatch(blaze(3), ['a', 'b'])
+    for (let level = 0; level < 3; level++) state = solve(state, 'a', 20_000)
+    state = applyLeave(state, 'a')
+    // b is alone but still has a finisher's time to chase, so the race runs on.
+    expect(matchEndReason(state, T0 + COUNTDOWN_MS)).toBeNull()
+    state = finishMatch(state)
+    expect(championOf(matchPodium(state))).toBe('a')
+    expect(places(state)).toEqual(['a', 'b'])
+  })
+
+  it('keeps the place of a finisher whose connection drops afterwards', () => {
+    let state = startMatch(blaze(3), ['a', 'b'])
+    for (let level = 0; level < 3; level++) state = solve(state, 'a', 1000)
+    state = applyDisconnect(state, 'a')
+    // The reconnect grace running out retires a seat, not a result.
+    state = applyLeave(state, 'a')
+    expect(state.participants.find((p) => p.id === 'a')?.exit).toBe('completed')
+
+    state = solve(state, 'b', 500)
+    state = finishMatch(state)
+    expect(championOf(matchPodium(state))).toBe('a')
+  })
+
+  it('is complete, not empty, once every player has played it out', () => {
+    let state = startMatch(blaze(3), ['a', 'b'])
+    for (let level = 0; level < 3; level++) {
+      state = solve(state, 'a', 1000)
+      state = solve(state, 'b', 2000)
+    }
+    expect(matchEndReason(state, T0 + COUNTDOWN_MS)).toBe('complete')
+    expect(championOf(matchPodium(finishMatch(state)))).toBe('a')
+  })
+
   it('ends as a walkover when everyone else leaves', () => {
     let state = startMatch(blaze(3), ['a', 'b'])
     state = solve(state, 'a', 1000)
@@ -374,13 +437,90 @@ describe('knockout', () => {
     expect(podium[3]?.eliminatedAtLevel).toBe(1)
   })
 
-  it('knocks out the player who got least far when nobody solves the level', () => {
+  it('decides an unsolved level on the record the server verified, not on reported progress', () => {
+    // Identical state, one field different: the number of cats each client
+    // claims to have placed. The server holds the solution but never sees a
+    // board, so that number is unverifiable and must not rank anybody — least
+    // of all decide who goes home.
+    let state = startMatch(knockout(), ['a', 'b', 'c', 'd'])
+    for (const [id, elapsed] of [
+      ['a', 1000],
+      ['b', 2000],
+      ['c', 3000],
+      ['d', 4000],
+    ] as const) {
+      state = solve(state, id, elapsed)
+    }
+    state = resolveLevel(state, T0 + COUNTDOWN_MS).state
+    state = beginLevel(state, T0 + COUNTDOWN_MS + INTERLUDE_MS)
+
+    const now = levelDeadlineAt(state)
+    const honest = resolveLevel(state, now, { a: 0, b: 0, c: 0 })
+    const lied = resolveLevel(state, now, { a: 0, b: 0, c: 99 })
+
+    // Nobody solved it, so the level is decided by who has solved least and
+    // spent longest getting there — both of them times the server measured.
+    expect(honest.result?.winnerId).toBeNull()
+    expect(honest.result?.eliminatedId).toBe('c')
+    expect(lied.result?.eliminatedId).toBe('c')
+    expect(lied.result?.ranking).toEqual(['a', 'b', 'c'])
+  })
+
+  it('eliminates nobody from a level the rules cannot separate anyone on', () => {
+    // First level, nobody solved it, nobody has a record yet: the three players
+    // really are indistinguishable on everything the server knows, and a
+    // knockout must not evict one of them on a number they typed themselves.
     const state = startMatch(knockout(), ['a', 'b', 'c'])
     const now = levelDeadlineAt(state)
     const closed = resolveLevel(state, now, { a: 4, b: 2, c: 3 })
     expect(closed.result?.winnerId).toBeNull()
-    expect(closed.result?.ranking).toEqual(['a', 'c', 'b'])
-    expect(closed.result?.eliminatedId).toBe('b')
+    expect(closed.result?.eliminatedId).toBeNull()
+    expect(closed.state.participants.every((p) => p.exit === null)).toBe(true)
+  })
+
+  it('still reaches a champion after a level that eliminated nobody', () => {
+    let state = startMatch(knockout(), ['a', 'b', 'c'])
+    let now = levelDeadlineAt(state)
+    state = resolveLevel(state, now, {}).state
+    now += INTERLUDE_MS
+    state = beginLevel(state, now)
+
+    state = solve(state, 'a', 1000)
+    now = levelDeadlineAt(state)
+    const closed = resolveLevel(state, now, {})
+    // b and c are still level with each other, so this level puts nobody out
+    // either, and the schedule simply runs out with three players standing.
+    expect(closed.result?.eliminatedId).toBeNull()
+    state = beginLevel(closed.state, now + INTERLUDE_MS)
+
+    expect(state.phase).toBe('finished')
+    const podium = matchPodium(state)
+    expect(podium.map((entry) => entry.place)).toEqual([1, 2, 3])
+    expect(championOf(podium)).toBe('a')
+    expect(new Set(podium.map((entry) => entry.playerId)).size).toBe(3)
+  })
+
+  it('does not call a title earned when the room emptied after the last level', () => {
+    let state = startMatch(knockout(), ['a', 'b', 'c', 'd'])
+    const now = T0 + COUNTDOWN_MS
+    for (const [id, elapsed] of [
+      ['a', 1000],
+      ['b', 2000],
+      ['c', 3000],
+      ['d', 4000],
+    ] as const) {
+      state = solve(state, id, elapsed)
+    }
+    state = resolveLevel(state, now).state
+    expect(matchEndReason(state, now)).toBeNull()
+
+    // Two players walk out of the interlude. a is the last one standing
+    // because the room emptied, not because a beat anybody in a final.
+    state = applyLeave(state, 'b')
+    state = applyLeave(state, 'c')
+    expect(matchEndReason(state, now)).toBe('walkover')
+    state = finishMatch(state)
+    expect(championOf(matchPodium(state))).toBe('a')
   })
 
   it('makes the next level the final when the room drops to two early', () => {
@@ -464,19 +604,51 @@ describe('disconnects', () => {
     expect(closed.result?.ranking).toEqual(['a', 'b'])
   })
 
-  it('ranks a timeout above an abandonment however far each got', () => {
-    const finishes: LevelFinish[] = [
-      {
-        playerId: 'gone',
-        levelIndex: 0,
-        status: 'abandoned',
-        elapsedMs: null,
-        progress: 5,
-        seq: 2,
-      },
-      { playerId: 'stuck', levelIndex: 0, status: 'timeout', elapsedMs: null, progress: 0, seq: 1 },
-    ]
-    expect(rankFinishes(finishes).map((f) => f.playerId)).toEqual(['stuck', 'gone'])
+  it('ranks a timeout above an abandonment however far each claims to have got', () => {
+    const gone: LevelFinish = {
+      playerId: 'gone',
+      levelIndex: 0,
+      status: 'abandoned',
+      elapsedMs: null,
+      progress: 5,
+      seq: 2,
+    }
+    const stuck: LevelFinish = {
+      playerId: 'stuck',
+      levelIndex: 0,
+      status: 'timeout',
+      elapsedMs: null,
+      progress: 0,
+      seq: 1,
+    }
+    expect([gone, stuck].sort(compareFinishes).map((f) => f.playerId)).toEqual(['stuck', 'gone'])
+  })
+
+  it('ends a steady match with no champion when the whole room walks out', () => {
+    let state = startMatch(steady(3), ['a', 'b'])
+    state = solve(state, 'a', 1000)
+    for (const id of ['a', 'b']) state = applyLeave(state, id)
+    expect(matchEndReason(state, T0)).toBe('empty')
+    state = finishMatch(state)
+    expect(championOf(matchPodium(state))).toBeNull()
+    expect(matchPodium(state).every((entry) => entry.status === 'left')).toBe(true)
+  })
+
+  it('does not demote a player who closes the podium screen', () => {
+    let state = startMatch(steady(3), ['a', 'b'])
+    let now = T0 + COUNTDOWN_MS
+    for (let level = 0; level < 3; level++) {
+      state = solve(state, 'a', 1000)
+      state = solve(state, 'b', 2000)
+      state = resolveLevel(state, now).state
+      now += INTERLUDE_MS
+      state = beginLevel(state, now)
+    }
+    expect(state.phase).toBe('finished')
+    // The match is over; there is nothing left to forfeit by leaving it.
+    expect(applyLeave(state, 'a')).toBe(state)
+    expect(places(applyLeave(state, 'a'))).toEqual(['a', 'b'])
+    expect(championOf(matchPodium(applyLeave(state, 'a')))).toBe('a')
   })
 
   it('stops a player who left from winning the level they were in', () => {

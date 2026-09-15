@@ -11,12 +11,17 @@
  * Reconnection is `partysocket`'s, configured rather than reimplemented. Two
  * things are added on top of it.
  *
- * The first is a stable identity. The socket carries a session id that survives
- * both a reconnect and a reload of the same tab, so the server sees a player
- * returning rather than a stranger arriving, and the player's seat, score and
- * position in the match are still there when they get back. The board itself is
- * local and untouched by any of this: a connection that drops mid-level costs
- * the player nothing but the progress bar going quiet.
+ * The first is being able to come back. The room issues a seat token in its
+ * `welcome` and this module keeps it for the tab, presenting it on every
+ * subsequent join, so the server sees a player returning rather than a stranger
+ * arriving and the player's seat, score and position in the match are still
+ * there when they get back. The token is the only thing that does that: the
+ * player id in the same frame is public, is broadcast to the whole room, and
+ * proves nothing. Keeping the token per tab rather than per browser is
+ * deliberate — two tabs are two players — and it is kept in `sessionStorage` so
+ * it survives a reload of a live match. The board itself is local and untouched
+ * by any of this: a connection that drops mid-level costs the player nothing
+ * but the progress bar going quiet.
  *
  * The second is knowing the difference between a connection that is down and
  * one that is merely silent. A WebSocket through a sleeping phone, a dying
@@ -35,6 +40,7 @@ import {
   type ClientMessage,
   type RoomCode,
   type RoomErrorCode,
+  type SeatToken,
   type ServerMessage,
   encodeMessage,
   parseServerMessage,
@@ -82,6 +88,7 @@ const REJECTION_CODES: readonly RejectionCode[] = [
   'version-mismatch',
   'room-full',
   'match-in-progress',
+  'superseded',
   'not-host',
   'not-enough-players',
   'bad-name',
@@ -182,10 +189,20 @@ export type PartyClientConfig = {
   room: RoomCode
   name: string
   /**
-   * Stable across reconnects and reloads of this tab, so the server recognises
-   * a returning player. Defaults to a per-tab id kept in `sessionStorage`.
+   * The id `partysocket` puts on the socket URL.
+   *
+   * Transport bookkeeping and nothing else: the party server mints its own
+   * connection id at the door and discards whatever arrives here, precisely so
+   * that naming a connection is not a way to become its owner. Kept because it
+   * is stable for the tab, which makes a reconnect easy to follow in a log.
+   * Defaults to a per-tab id in `sessionStorage`.
    */
   sessionId?: string
+  /**
+   * The seat to resume, overriding whatever this tab has stored for the room.
+   * Tests use it; the app has no reason to.
+   */
+  seatToken?: SeatToken
   /** Overrides the configured party host. */
   host?: string
   /** Injected in tests so nothing opens a real socket. */
@@ -212,6 +229,9 @@ export type PartyClient = {
 }
 
 const SESSION_KEY = 'meowdoku:mp:session'
+
+/** One stored token per room: a tab may have been in more than one. */
+const SEAT_TOKEN_PREFIX = 'meowdoku:mp:seat:'
 
 const randomId = (): string => {
   const cryptoApi = typeof globalThis.crypto === 'object' ? globalThis.crypto : null
@@ -248,10 +268,47 @@ export const clearSessionPlayerId = (): void => {
   }
 }
 
+/**
+ * The seat token this tab holds for a room, if any.
+ *
+ * `sessionStorage` for the same reasons as the session id above, plus one more:
+ * this is a credential. It must die with the tab, it must never be readable by
+ * another tab pretending to be this one, and it must never share a key with
+ * anything a single-player session touches. Storage being unavailable is not an
+ * error — the token then lives only in memory, and a reload becomes a new
+ * player instead of a returning one.
+ */
+export const seatTokenFor = (room: RoomCode): SeatToken | null => {
+  try {
+    const stored = sessionStorage.getItem(SEAT_TOKEN_PREFIX + room)
+    return stored !== null && stored.length > 0 ? stored : null
+  } catch {
+    return null
+  }
+}
+
+const rememberSeatToken = (room: RoomCode, token: SeatToken): void => {
+  try {
+    sessionStorage.setItem(SEAT_TOKEN_PREFIX + room, token)
+  } catch {
+    // The token still works for this client instance; only a reload loses it.
+  }
+}
+
+/** Gives up a seat, so the next connection to this room is a new player. */
+export const clearSeatToken = (room: RoomCode): void => {
+  try {
+    sessionStorage.removeItem(SEAT_TOKEN_PREFIX + room)
+  } catch {
+    // Nothing to forget if storage was never available.
+  }
+}
+
 const rejectionMessages: Readonly<Record<RejectionCode, string>> = {
   'version-mismatch': 'This app is out of date. Reload to play multiplayer.',
   'room-full': 'That room is full.',
   'match-in-progress': 'That match has already started.',
+  superseded: 'This room is open somewhere else.',
   'room-not-found': 'No room with that code.',
   'no-party-host': 'Multiplayer is not available in this build.',
   'not-host': 'Only the host can do that.',
@@ -277,6 +334,7 @@ export const createPartyClient = (config: PartyClientConfig): PartyClient => {
   let clock: ClockEstimate = { offsetMs: 0, rttMs: null }
   let admitted = false
   let closedByUs = false
+  let seat: SeatToken | null = config.seatToken ?? seatTokenFor(config.room)
   let lastSeenAt = now()
   let heartbeat: ReturnType<typeof setInterval> | null = null
   let socket: PartySocket | null = null
@@ -345,6 +403,10 @@ export const createPartyClient = (config: PartyClientConfig): PartyClient => {
       return
     }
     if (message.t === 'welcome') {
+      // Kept before the event goes out, so that anything the store does in
+      // response to being admitted already has a seat to come back to.
+      seat = message.token
+      rememberSeatToken(config.room, message.token)
       admitted = true
       setStatus('connected')
     }
@@ -387,8 +449,16 @@ export const createPartyClient = (config: PartyClientConfig): PartyClient => {
       lastSeenAt = now()
       // The join carries the name on every connection, not just the first, so a
       // reconnecting player re-asserts who they are without the store having to
-      // know whether this socket is new.
-      send({ t: 'join', v: PROTOCOL_VERSION, name: config.name })
+      // know whether this socket is new. It carries the seat token whenever
+      // there is one, which is what turns this socket into the same player
+      // rather than another one; without it the room has no way to tell, and
+      // must not guess.
+      send({
+        t: 'join',
+        v: PROTOCOL_VERSION,
+        name: config.name,
+        ...(seat === null ? {} : { token: seat }),
+      })
       startHeartbeat()
     })
 
@@ -448,7 +518,14 @@ export const createPartyClient = (config: PartyClientConfig): PartyClient => {
     close: (options) => {
       closedByUs = true
       stopHeartbeat()
-      if (options?.leave === true) send({ t: 'leave' })
+      if (options?.leave === true) {
+        send({ t: 'leave' })
+        // The seat is being given up, so the token that owns it is worthless
+        // and keeping it would only mean presenting a stale credential the next
+        // time this tab tried the same room.
+        seat = null
+        clearSeatToken(config.room)
+      }
       socket?.close(1000, 'client-close')
       setStatus('disconnected')
       listeners.clear()
@@ -468,6 +545,20 @@ export type LobbyOptions = {
 /** The lobby is a registry lookup, not a match; it should answer instantly. */
 const LOBBY_TIMEOUT_MS = 4_000
 
+/** A lobby request the server refused, carrying the status so callers can read it. */
+type LobbyFailure = Error & { status?: number }
+
+const lobbyFailure = (message: string, status?: number): LobbyFailure => {
+  const error: LobbyFailure = new Error(message)
+  if (status !== undefined) error.status = status
+  return error
+}
+
+const statusOf = (error: unknown): number | null =>
+  typeof error === 'object' && error !== null && typeof (error as LobbyFailure).status === 'number'
+    ? ((error as LobbyFailure).status as number)
+    : null
+
 const lobbyFetch = async (
   path: string,
   init: RequestInit,
@@ -475,7 +566,7 @@ const lobbyFetch = async (
 ): Promise<unknown> => {
   const url = partyUrl(path)
   const doFetch = options.fetchImpl ?? (typeof fetch === 'function' ? fetch : null)
-  if (url === null || doFetch === null) throw new Error('no-party-host')
+  if (url === null || doFetch === null) throw lobbyFailure('no-party-host')
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? LOBBY_TIMEOUT_MS)
   try {
@@ -486,7 +577,7 @@ const lobbyFetch = async (
       mode: 'cors',
       signal: controller.signal,
     })
-    if (!response.ok) throw new Error(`lobby-${response.status}`)
+    if (!response.ok) throw lobbyFailure(`lobby-${response.status}`, response.status)
     return (await response.json()) as unknown
   } finally {
     clearTimeout(timer)
@@ -505,6 +596,11 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
  * server mints it; the client's job is to display it and connect to it. The
  * lobby can legitimately fail to find a free code, which is a "try again"
  * rather than an error worth dwelling on.
+ *
+ * Room codes are a finite shared resource, so the lobby rations them and a
+ * caller asking for too many is told so. That is a different thing from the
+ * server being broken and is worth saying differently: "slow down" is advice a
+ * player can act on.
  */
 export const createRoom = async (
   options: LobbyOptions = {},
@@ -518,7 +614,10 @@ export const createRoom = async (
       return { ok: false, reason: 'server-error', message: rejectionMessage('server-error') }
     }
     return { ok: true, code: code as RoomCode }
-  } catch {
+  } catch (error) {
+    if (statusOf(error) === 429) {
+      return { ok: false, reason: 'rate-limited', message: rejectionMessage('rate-limited') }
+    }
     return { ok: false, reason: 'server-error', message: rejectionMessage('server-error') }
   }
 }

@@ -16,8 +16,8 @@ const snapshot: RoomSnapshot = {
   hostId: 'a',
   settings: { mode: 'steady', levelCount: 3, difficulty: 'easy' },
   seats: [
-    { id: 'a', name: 'Milo', joinedAt: 1, disconnectedAt: null },
-    { id: 'b', name: 'Suki', joinedAt: 2, disconnectedAt: 5000 },
+    { id: 'a', name: 'Milo', joinedAt: 1, token: 'tok-a', disconnectedAt: null },
+    { id: 'b', name: 'Suki', joinedAt: 2, token: 'tok-b', disconnectedAt: 5000 },
   ],
   match,
   levelStartedAt: { a: 4000, b: 4000 },
@@ -72,10 +72,31 @@ describe('decodeRoomSnapshot', () => {
   it('drops seats it cannot make sense of instead of failing the whole room', () => {
     const restored = decodeRoomSnapshot({
       ...roundTrip(snapshot),
-      seats: [{ id: 'a', name: 'Milo', joinedAt: 1, disconnectedAt: null }, { id: 7 }, null],
+      seats: [
+        { id: 'a', name: 'Milo', joinedAt: 1, token: 'tok-a', disconnectedAt: null },
+        { id: 7 },
+        null,
+      ],
     })
     expect(restored?.seats).toHaveLength(1)
     expect(restored?.seats[0]?.id).toBe('a')
+  })
+
+  it('carries each seat token, because a restart is when resuming matters most', () => {
+    const restored = decodeRoomSnapshot(roundTrip(snapshot))
+    expect(restored?.seats.map((seat) => seat.token)).toEqual(['tok-a', 'tok-b'])
+  })
+
+  it('leaves a seat with no stored token unresumable rather than open to anyone', () => {
+    // The seat survives so the podium can still name the player. What it does
+    // not get is a token anybody could satisfy: an empty one resolves to
+    // nothing, so that player rejoins as a newcomer instead of a stranger being
+    // handed their place.
+    const restored = decodeRoomSnapshot({
+      ...roundTrip(snapshot),
+      seats: [{ id: 'a', name: 'Milo', joinedAt: 1, disconnectedAt: null }],
+    })
+    expect(restored?.seats[0]?.token).toBe('')
   })
 
   it('falls back to the default settings rather than an unplayable mode', () => {
@@ -94,7 +115,7 @@ describe('decodeRoomSnapshot', () => {
     expect(restored).not.toBeNull()
     expect(Object.keys(restored ?? {})).not.toContain('progress')
     for (const seat of restored?.seats ?? []) {
-      expect(Object.keys(seat)).toEqual(['id', 'name', 'joinedAt', 'disconnectedAt'])
+      expect(Object.keys(seat)).toEqual(['id', 'name', 'joinedAt', 'token', 'disconnectedAt'])
     }
   })
 })

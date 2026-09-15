@@ -25,6 +25,7 @@ import {
 import type { GameMode, LevelCount, MatchDifficulty } from '../../multiplayer/protocol'
 import { MIN_KNOCKOUT_PLAYERS, canStartMatch, levelCountFor } from '../../multiplayer/match'
 import {
+  selectCanStart,
   selectCode,
   selectPhase,
   selectPlayers,
@@ -50,9 +51,12 @@ import { savePlayerName } from './playerName'
  * until two remain — so a control would be offering a choice that does not
  * exist. The derived number is stated instead, and it moves as people arrive.
  *
- * Nothing here decides a rule. Whether the host may start is `canStartMatch`,
- * the same function the server refuses with, so the button and the server never
- * disagree; the screen's only addition is saying which condition is unmet.
+ * Nothing here decides a rule. Whether the host may start is `selectCanStart`,
+ * which is `canStartMatch` — the same function the server refuses with — over
+ * the phase the room is in, so the button and the server never disagree. The
+ * screen's only addition is saying which condition is unmet, and for that it
+ * calls `canStartMatch` again purely to read the reason back out: one rule
+ * decides, the other wording explains, and neither can drift from the server.
  */
 
 const MODE_OPTIONS: readonly SegmentedOption<GameMode>[] = [
@@ -97,7 +101,11 @@ const shareUrlFor = (code: string): string | null =>
 export function RoomScreen({
   onLeave,
 }: {
-  /** Where to go once the room has been left. The socket is already closed. */
+  /**
+   * Leaves the room and goes somewhere sensible. Closing the socket belongs to
+   * the caller, which is the one place that knows where "somewhere" is, so this
+   * screen never tears a connection down behind its owner's back.
+   */
   onLeave: () => void
 }) {
   const code = useMultiplayerStore(selectCode)
@@ -110,10 +118,10 @@ export function RoomScreen({
   const playerId = useMultiplayerStore((state) => state.playerId)
   const myName = useMultiplayerStore((state) => state.name)
   const notice = useMultiplayerStore((state) => state.notice)
+  const canStart = useMultiplayerStore(selectCanStart)
 
   const updateSettings = useMultiplayerStore((state) => state.updateSettings)
   const startMatch = useMultiplayerStore((state) => state.startMatch)
-  const leaveRoom = useMultiplayerStore((state) => state.leaveRoom)
   const retry = useMultiplayerStore((state) => state.retry)
   const rename = useMultiplayerStore((state) => state.rename)
   const dismissNotice = useMultiplayerStore((state) => state.dismissNotice)
@@ -123,8 +131,12 @@ export function RoomScreen({
   const isHost = playerId !== null && playerId === hostId
   const readOnly = !isHost
   const present = players.filter((player) => player.connected).length
+  // Consulted only for the reason; `canStart` is the verdict.
   const gate = canStartMatch(settings, players)
-  const starting = phase !== 'lobby'
+  // The room is already on its way into a match. The screen normally hands over
+  // to the match screen the moment the server says so, so this is the gap of
+  // one round trip between the tap and the phase changing.
+  const starting = phase !== 'lobby' && phase !== 'finished'
 
   const rows: PlayerRow[] = players.map((player) => ({
     id: player.id,
@@ -171,11 +183,9 @@ export function RoomScreen({
     setRenaming(null)
   }
 
-  const leave = (): void => {
-    leaveRoom()
-    onLeave()
-  }
-
+  // What is missing, when something is. Only the field can be, so this reads
+  // `gate` rather than `canStart`: the other half of `canStart` is the phase,
+  // and a phase that is not startable is one where this screen is not on show.
   const blocked =
     gate.ok || starting
       ? null
@@ -194,10 +204,10 @@ export function RoomScreen({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3" style={{ animation: 'mdkFade .25s' }}>
-      <ScreenHeader title="Waiting room" onBack={leave} backLabel="Leave room" />
+      <ScreenHeader title="Waiting room" onBack={onLeave} backLabel="Leave room" />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-1">
-        <ConnectionBanner status={status} rejection={rejection} onRetry={retry} onLeave={leave} />
+        <ConnectionBanner status={status} rejection={rejection} onRetry={retry} onLeave={onLeave} />
 
         {code === null ? null : <RoomCodeCard code={code} shareUrl={shareUrlFor(code)} />}
 
@@ -296,7 +306,7 @@ export function RoomScreen({
             unavailable: a guest waiting in a two-player knockout room should
             know that nobody can start it, not just that nobody has. */}
         {isHost ? (
-          <PrimaryAction onClick={startMatch} disabled={!gate.ok || starting}>
+          <PrimaryAction onClick={startMatch} disabled={!canStart || starting}>
             {starting ? 'Starting…' : 'Start match'}
           </PrimaryAction>
         ) : null}

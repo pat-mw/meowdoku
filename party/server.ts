@@ -11,14 +11,23 @@ export { Registry } from './registry'
  * The Worker in front of the rooms.
  *
  * Three jobs, and deliberately no fourth. It hands out room codes, it answers
- * whether a code is live, and it lets a socket through to a room — canonicalised
- * and origin-checked — before PartyServer takes over. Nothing about a match is
- * decided here; the room object is the authority and this is the door.
+ * whether a code is live, and it lets a socket through to a room — canonicalised,
+ * origin-checked and with a connection id the server chose — before PartyServer
+ * takes over. Nothing about a match is decided here; the room object is the
+ * authority and this is the door.
+ *
+ * Being the door means being the only place two things can be enforced. Room
+ * creation is unauthenticated and consumes a shared, finite code space, so it
+ * is rationed per caller here rather than trusted. And a connection's id is
+ * assigned here rather than accepted from the query string, because PartyServer
+ * would otherwise let a client name itself anything, including somebody else.
  *
  * ROUTES
  *   GET  /health          liveness and protocol version, for the connection
  *                         check the app runs before it offers multiplayer
- *   POST /rooms           allocate a code: `{ code }`
+ *   POST /rooms           allocate a code: `{ code }`, or 429/503 with
+ *                         `Retry-After` when the caller or the deployment has
+ *                         to wait
  *   GET  /rooms/:code     `{ exists }` for a code typed into the join field
  *   WS   /parties/room/:code
  */
@@ -54,11 +63,30 @@ const corsHeaders = (origin: string | null): Record<string, string> =>
         Vary: 'Origin',
       }
 
-const json = (body: unknown, status: number, origin: string | null): Response =>
+const json = (
+  body: unknown,
+  status: number,
+  origin: string | null,
+  extra: Record<string, string> = {},
+): Response =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...JSON_HEADERS, ...corsHeaders(origin) },
+    headers: { ...JSON_HEADERS, ...corsHeaders(origin), ...extra },
   })
+
+/**
+ * Who is asking, for the purpose of rationing room codes.
+ *
+ * `CF-Connecting-IP` is set by the edge and cannot be forged by the client;
+ * `X-Forwarded-For` is only consulted because `wrangler dev` does not always
+ * set the first, and a local run with no rationing at all would mean the limit
+ * is never exercised until it matters. An address that cannot be determined
+ * returns the empty string, and the registry rations those together.
+ */
+const callerAddress = (request: Request): string =>
+  request.headers.get('CF-Connecting-IP') ??
+  request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+  ''
 
 /**
  * The room code inside a party URL, canonicalised.
@@ -93,11 +121,17 @@ export default {
 
     if (url.pathname === '/rooms' && request.method === 'POST') {
       const registry = await getServerByName(env.Registry, REGISTRY_NAME)
-      const result = await registry.allocate()
+      const result = await registry.allocate(callerAddress(request))
       if (!result.ok) {
-        // Both failure modes are momentary. Saying so is more useful than a
-        // generic 500, and a client that retries in a second will succeed.
-        return json({ error: result.reason }, 503, origin)
+        const seconds = Math.max(1, Math.ceil(result.retryAfterMs / 1000))
+        // Every failure here is momentary, so every one of them says how long a
+        // moment is. The status separates the two kinds: 429 is this caller
+        // asking for too many codes, 503 is the deployment having none to give.
+        // Anyone reading the logs wants very different things from those two.
+        const status = result.reason === 'rate-limited' ? 429 : 503
+        return json({ error: result.reason, retryAfterMs: result.retryAfterMs }, status, origin, {
+          'Retry-After': String(seconds),
+        })
       }
       return json({ code: result.code }, 201, origin)
     }
@@ -117,8 +151,17 @@ export default {
         // Rewrite rather than redirect: a WebSocket upgrade cannot follow a 301,
         // and the room's identity is derived from this path segment.
         url.pathname = url.pathname.replace(`/parties/room/${raw}`, `/parties/room/${code}`)
-        request = new Request(url, request)
       }
+      // PartyServer takes a connection's id from the `_pk` query parameter,
+      // which means the CLIENT names its own connection. Its connection map is
+      // keyed by that id, so a socket opened with somebody else's id silently
+      // replaces theirs and takes over everything the room addresses by
+      // connection. The id is therefore minted here, at the door, and whatever
+      // the client asked for is thrown away: a connection id is now a thing the
+      // server hands out, unguessable and unique per socket. What a player owns
+      // is their seat token, which travels in the join frame and nowhere else.
+      url.searchParams.set('_pk', crypto.randomUUID())
+      request = new Request(url, request)
       const routed = await routePartykitRequest(request, env, {
         onBeforeConnect: async (_req, lobby) => {
           // A code nobody is using must not conjure an empty room: the guest

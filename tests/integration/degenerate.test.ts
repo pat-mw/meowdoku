@@ -70,7 +70,10 @@ describe.skipIf(!partyReachable)('a dropped connection', () => {
     expect(dropped.phase).toBe('playing')
     expect(RECONNECT_GRACE_MS).toBeGreaterThan(5_000)
 
-    const back = await connect(code, { sessionId: ada.sessionId, name: 'Ada' })
+    // The seat token is what brings her back. A reconnect that presented
+    // anything else — the id she was broadcast under, the session id on her
+    // socket URL — would be a stranger arriving mid-match, and refused as one.
+    const back = await connect(code, { token: ada.token ?? '', name: 'Ada' })
     expect(back.playerId).toBe(adaId)
 
     const welcome = await back.waitFor('welcome')

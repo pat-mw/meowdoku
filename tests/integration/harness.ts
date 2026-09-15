@@ -107,13 +107,32 @@ export const solutionFor = (levelNumber: number): number[] => {
   return [...solution]
 }
 
-/** Asks the lobby for a room code, exactly as the app's create-room screen does. */
-export const allocateRoom = async (): Promise<string> => {
+/** One attempt at a room code, refusals included. */
+export const tryAllocateRoom = async (): Promise<{ status: number; code: string | null }> => {
   const response = await fetch(`${HTTP_BASE}/rooms`, { method: 'POST' })
-  if (response.status !== 201) throw new Error(`POST /rooms answered ${response.status}`)
   const body = (await response.json()) as { code?: unknown }
-  if (typeof body.code !== 'string') throw new Error('POST /rooms answered without a code')
-  return body.code
+  return { status: response.status, code: typeof body.code === 'string' ? body.code : null }
+}
+
+/**
+ * Asks the lobby for a room code, exactly as the app's create-room screen does.
+ *
+ * Room creation is rationed per caller, and every client in this suite is the
+ * same caller: one address, on one machine. A test that deliberately floods the
+ * lobby would otherwise leave every later test unable to open a room at all.
+ * Waiting out a refusal is also what the app does, so the retry is not a
+ * concession to the tests — it is the behaviour being relied on.
+ */
+export const allocateRoom = async (timeoutMs = DEFAULT_WAIT_MS): Promise<string> => {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const attempt = await tryAllocateRoom()
+    if (attempt.code !== null) return attempt.code
+    if (attempt.status !== 429 || Date.now() >= deadline) {
+      throw new Error(`POST /rooms answered ${attempt.status}`)
+    }
+    await sleep(250)
+  }
 }
 
 /** Whether the registry considers a code live. */
@@ -152,6 +171,14 @@ export class TestClient {
   readonly room: string
   readonly received: ServerMessage[] = []
   playerId: PlayerId | null = null
+  /**
+   * The seat token this client was issued, if it has been admitted.
+   *
+   * The only thing that gets a client back into its own seat. Deliberately
+   * separate from `playerId`, which every client in the room is shown and which
+   * proves nothing — see tests/integration/identity.test.ts.
+   */
+  token: string | null = null
   closed: CloseInfo | null = null
 
   #socket: WebSocket
@@ -172,7 +199,10 @@ export class TestClient {
     this.#socket.addEventListener('message', (event: MessageEvent) => {
       const message = parseServerMessage(event.data)
       if (message === null) return
-      if (message.t === 'welcome') this.playerId = message.you
+      if (message.t === 'welcome') {
+        this.playerId = message.you
+        this.token = message.token
+      }
       this.received.push(message)
       this.#wake()
     })
@@ -310,7 +340,7 @@ export class TestClient {
    * Claims the solution to a scheduled level.
    *
    * The claimed time is deliberately settable and deliberately ignored by the
-   * server; `tests/integration/authority.test.ts` is the proof.
+   * server; the `timing authority` suite in ./race.test.ts is the proof.
    */
   solve(levelIndex: number, schedule: readonly LevelSpec[], clientMs = 0): void {
     const spec = schedule[levelIndex]
@@ -353,8 +383,19 @@ export class TestClient {
 }
 
 export type ConnectOptions = {
-  /** Reuse an id to be recognised as a returning player rather than a new one. */
+  /**
+   * The `_pk` on the socket URL.
+   *
+   * PartyServer would take a connection's id from it; the Worker in front of
+   * the rooms overwrites it, so it identifies nothing. Settable because tests
+   * exist to prove exactly that.
+   */
   sessionId?: string
+  /**
+   * A seat token from a previous `welcome`, to be recognised as a returning
+   * player rather than a new one. Nothing else in the protocol does that.
+   */
+  token?: string
   /** Sent in the join frame; the room may make it unique within the room. */
   name?: string
   /** False to return before the room has admitted the player — for refusals. */
@@ -375,7 +416,12 @@ export const connect = async (room: string, options: ConnectOptions = {}): Promi
     options.sessionId ?? `t${++sessionCounter}-${Math.random().toString(36).slice(2, 8)}`
   const client = new TestClient(room, sessionId)
   await client.ready(options.timeoutMs)
-  client.send({ t: 'join', v: PROTOCOL_VERSION, name: options.name ?? sessionId })
+  client.send({
+    t: 'join',
+    v: PROTOCOL_VERSION,
+    name: options.name ?? sessionId,
+    ...(options.token === undefined ? {} : { token: options.token }),
+  })
   if (options.admit !== false) {
     await client.waitFor('welcome', () => true, { timeoutMs: options.timeoutMs })
   }

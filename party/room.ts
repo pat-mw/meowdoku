@@ -50,6 +50,7 @@ import {
 } from '../src/multiplayer/match'
 import type { MatchState } from '../src/multiplayer/match'
 import type { Env } from './env'
+import { SeatKeyring } from './lib/identity'
 import { LevelVault } from './lib/levels'
 import { commandBucket, progressBucket, type TokenBucket } from './lib/rateLimit'
 import { fallbackName, uniqueName } from './lib/names'
@@ -79,6 +80,13 @@ import {
  * VERIFICATION. A claimed solution is checked against the level the server
  * generates from the same level number, in `./levels`. Nothing else in the
  * claim is trusted.
+ *
+ * IDENTITY. A connection is nobody until it presents something. Its id is
+ * minted by the Worker in front of this object and means only "this socket";
+ * a seat is entered by minting one or by presenting the seat's token, which
+ * this room issued to its owner alone. Player ids go out in every broadcast and
+ * grant nothing, which is what stops reading the room from being enough to take
+ * a place in it. See ./lib/identity.
  *
  * MEMORY, WITH A WRITE-DOWN. Room state lives in fields. Durable Object storage
  * carries a snapshot written on transitions only, so an eviction mid-match is
@@ -117,6 +125,16 @@ type Seat = {
   id: PlayerId
   name: string
   joinedAt: number
+  /**
+   * The socket currently sitting in this seat, or null between connections.
+   *
+   * Every message is attributed through this field, so a frame only counts as
+   * this player's if it arrives on the connection the seat is holding. It also
+   * settles the ordering when a player comes back before the room has noticed
+   * they left: the close of the connection they replaced must not mark the seat
+   * disconnected, because by then somebody is sitting in it.
+   */
+  connectionId: string | null
   connected: boolean
   /** Server epoch ms of the drop that started the reconnect grace, or null. */
   disconnectedAt: number | null
@@ -144,6 +162,13 @@ export class Room extends Server<Env> {
   #hostId: PlayerId | null = null
   #settings: RoomSettings = DEFAULT_SETTINGS
   #seats = new Map<PlayerId, Seat>()
+
+  /** Seat tokens, kept apart from the seats so a broadcast cannot carry one. */
+  #keyring = new SeatKeyring()
+
+  /** Which seat each live connection is sitting in. The inverse of `Seat.connectionId`. */
+  #byConnection = new Map<string, PlayerId>()
+
   #match: MatchState | null = null
   #podium: PodiumEntry[] | null = null
   #phaseStartedAt = 0
@@ -196,7 +221,9 @@ export class Room extends Server<Env> {
    * Every seat comes back disconnected, because whatever sockets existed died
    * with the previous instance. Players reconnect into the same seats within
    * seconds — the reconnect grace exists precisely to cover this — and the
-   * match carries on from the finishes it had already recorded.
+   * match carries on from the finishes it had already recorded. The seat tokens
+   * come back with the seats, since they are the only thing that will let those
+   * players prove which seat is theirs.
    */
   #restore(snapshot: RoomSnapshot): void {
     const now = Date.now()
@@ -209,6 +236,8 @@ export class Room extends Server<Env> {
     this.#phaseEndsAt = snapshot.phaseEndsAt
     this.#vault = new LevelVault(undefined, snapshot.levels)
     this.#levelStartedAt = new Map(Object.entries(snapshot.levelStartedAt))
+    this.#keyring = new SeatKeyring()
+    this.#byConnection.clear()
     this.#seats = new Map(
       snapshot.seats.map((seat) => [
         seat.id,
@@ -216,6 +245,7 @@ export class Room extends Server<Env> {
           id: seat.id,
           name: seat.name,
           joinedAt: seat.joinedAt,
+          connectionId: null,
           connected: false,
           disconnectedAt: seat.disconnectedAt ?? now,
           gone: false,
@@ -223,6 +253,7 @@ export class Room extends Server<Env> {
         },
       ]),
     )
+    for (const seat of snapshot.seats) this.#keyring.adopt(seat.id, seat.token)
     if (this.#match) {
       for (const participant of this.#match.participants) {
         if (participant.exit !== null) {
@@ -245,6 +276,16 @@ export class Room extends Server<Env> {
       this.#reject(connection, 'not-in-match', 'That room has closed.')
       return
     }
+    if (this.#byConnection.has(connection.id) || this.#pending.has(connection.id)) {
+      // Two sockets with one id. PartyServer keys its connection map by that
+      // id, so the newcomer has already displaced whoever was there and the
+      // room can no longer reach them — the only thing left to do is refuse the
+      // one that caused it. Unreachable while the Worker mints these ids; kept
+      // because the cost of being wrong about that is a player silently losing
+      // their connection to somebody else's.
+      this.#reject(connection, 'server-error', 'That connection id is already in use.')
+      return
+    }
     this.#emptySince = null
     this.#pending.set(connection.id, now)
     this.#budgets.set(connection.id, {
@@ -260,8 +301,14 @@ export class Room extends Server<Env> {
     this.#pending.delete(connection.id)
     this.#budgets.delete(connection.id)
 
-    const seat = this.#seats.get(connection.id)
+    // Only the connection the seat is actually holding can vacate it. A socket
+    // that was superseded by its owner reconnecting closes afterwards, and
+    // treating that as a drop would take a player who is demonstrably present
+    // and start their reconnect grace running.
+    const seat = this.#seatOn(connection.id)
+    this.#byConnection.delete(connection.id)
     if (seat && !seat.gone) {
+      seat.connectionId = null
       seat.connected = false
       seat.disconnectedAt = now
       if (this.#inMatch()) {
@@ -272,7 +319,7 @@ export class Room extends Server<Env> {
       } else if (this.#phase === 'lobby') {
         // Nothing to forfeit in a lobby, and holding the slot would keep a
         // ninth player out on behalf of somebody who closed the tab.
-        this.#seats.delete(seat.id)
+        this.#removeSeat(seat)
       } else {
         // Between matches the seat is kept so the podium can still name them.
         seat.gone = true
@@ -325,7 +372,7 @@ export class Room extends Server<Env> {
         break
     }
 
-    const seat = this.#seats.get(connection.id)
+    const seat = this.#seatOn(connection.id)
     if (!seat || seat.gone) {
       this.#reject(connection, 'not-in-match', 'Send join before anything else.')
       return
@@ -349,6 +396,9 @@ export class Room extends Server<Env> {
         break
       case 'ready':
         this.#onReady(seat, now)
+        break
+      case 'rematch':
+        this.#onRematch(connection, now)
         break
       case 'leave':
         this.#onLeave(connection, seat, now)
@@ -381,6 +431,19 @@ export class Room extends Server<Env> {
     return false
   }
 
+  /**
+   * The only way into a seat.
+   *
+   * Order is the substance of this method. A join either presents a token this
+   * room issued, in which case it is the return of a player the room already
+   * knows, or it does not, in which case it is a stranger and every door policy
+   * applies to it: a match under way is closed, and a full room is full.
+   *
+   * Getting that order wrong is what made the room hijackable. When a seat
+   * could be re-entered by naming it, and naming it was tried before the
+   * match-in-progress guard, anybody who had read a state frame could walk into
+   * a running match as any player in it.
+   */
   #onJoin(connection: Connection, message: ClientMessage & { t: 'join' }, now: number): void {
     if (message.v !== PROTOCOL_VERSION) {
       this.#reject(connection, 'version-mismatch', 'Reload Meowdoku to join this room.')
@@ -388,16 +451,20 @@ export class Room extends Server<Env> {
     }
     this.#pending.delete(connection.id)
 
-    const existing = this.#seats.get(connection.id)
-    if (existing && !existing.gone) {
-      this.#resume(connection, existing, message.name, now)
+    // A repeated join on a connection that already holds a seat is the client
+    // re-asserting itself; answer it the same way as a return.
+    const held = this.#seatOn(connection.id)
+    const claimed = this.#keyring.resolve(message.token)
+    const returning = held ?? (claimed === null ? null : this.#seats.get(claimed))
+    if (returning && !returning.gone) {
+      this.#resume(connection, returning, message.name, now)
       return
     }
 
     // A match already under way is closed to newcomers. Letting somebody in
     // halfway would either hand them a schedule they cannot win or make every
     // ranking mean something different, and there is a coherent alternative
-    // already: wait for the podium, which turns the room back into a lobby.
+    // already: wait for the podium, and for the room to return to its lobby.
     if (this.#phase !== 'lobby' && this.#phase !== 'finished') {
       this.#reject(connection, 'match-in-progress', 'That match has already started.')
       return
@@ -407,16 +474,19 @@ export class Room extends Server<Env> {
       return
     }
 
+    const identity = this.#keyring.mint()
     const seat: Seat = {
-      id: connection.id,
-      name: this.#nameFor(message.name, connection.id),
+      id: identity.id,
+      name: this.#nameFor(message.name, identity.id),
       joinedAt: now,
+      connectionId: null,
       connected: true,
       disconnectedAt: null,
       gone: false,
       progress: 0,
     }
     this.#seats.set(seat.id, seat)
+    this.#bind(connection, seat)
     if (this.#hostId === null || !this.#seats.has(this.#hostId)) this.#hostId = seat.id
 
     this.#welcome(connection, seat, now)
@@ -427,15 +497,17 @@ export class Room extends Server<Env> {
   }
 
   /**
-   * Puts a reconnecting player back in the seat they left.
+   * Puts a returning player back in the seat they left.
    *
-   * The seat is found by connection id, which PartyServer takes from the `_pk`
-   * query parameter, so this only works if the client reuses the same id across
-   * a reconnect and a reload. That is a hard requirement on the client, not an
-   * optimisation: without it a refresh mid-match reads as "left the room" and
-   * forfeits the level.
+   * Reached only by presenting the seat's token, so this is the owner by
+   * definition — which is also why a second connection is allowed to take the
+   * seat over rather than being refused. A phone that reloads, or a socket that
+   * is open but has quietly stopped delivering, leaves a connection the server
+   * still believes in; refusing the new one would strand the player behind
+   * their own ghost until the grace period ran out.
    */
   #resume(connection: Connection, seat: Seat, name: string, now: number): void {
+    this.#bind(connection, seat)
     seat.connected = true
     seat.disconnectedAt = null
     if (name.length > 0 && name !== seat.name) seat.name = this.#nameFor(name, seat.id)
@@ -449,18 +521,64 @@ export class Room extends Server<Env> {
   }
 
   /**
+   * Hands a seat to a connection, evicting whatever was in it.
+   *
+   * The rebind happens before the old socket is closed, so that the close —
+   * which arrives later and carries the old connection's id — finds a seat that
+   * is no longer its and leaves the player alone.
+   */
+  #bind(connection: Connection, seat: Seat): void {
+    const previous = seat.connectionId
+    seat.connectionId = connection.id
+    this.#byConnection.set(connection.id, seat.id)
+    if (previous === null || previous === connection.id) return
+    this.#byConnection.delete(previous)
+    try {
+      this.getConnection(previous)?.close(CLOSE_REJECTED, 'superseded')
+    } catch {
+      // Already gone, which is the usual case: this is the socket that dropped.
+    }
+  }
+
+  /** The seat a connection is holding, or null if it is holding none. */
+  #seatOn(connectionId: string): Seat | null {
+    const playerId = this.#byConnection.get(connectionId)
+    if (playerId === undefined) return null
+    const seat = this.#seats.get(playerId)
+    if (!seat || seat.connectionId !== connectionId) return null
+    return seat
+  }
+
+  /** Forgets a seat completely: its slot, its secret and its connection. */
+  #removeSeat(seat: Seat): void {
+    this.#seats.delete(seat.id)
+    this.#keyring.forget(seat.id)
+    this.#ready.delete(seat.id)
+    this.#dirty.delete(seat.id)
+    this.#levelStartedAt.delete(seat.id)
+    if (seat.connectionId !== null) this.#byConnection.delete(seat.connectionId)
+    seat.connectionId = null
+  }
+
+  /**
    * The opening burst on a connection.
    *
    * A reconnecting player needs more than the room snapshot: they need the
    * schedule they missed and the clock of the level they are in the middle of,
    * so their board and their timer come back where they left them rather than
    * at zero.
+   *
+   * This is also the one frame in the protocol that carries a secret. The token
+   * goes to this connection and is never broadcast, never stored in room state
+   * and never mentioned in an error, because it is the whole of what proves a
+   * seat belongs to whoever is holding it.
    */
   #welcome(connection: Connection, seat: Seat, now: number): void {
     this.#send(connection, {
       t: 'welcome',
       v: PROTOCOL_VERSION,
       you: seat.id,
+      token: this.#keyring.tokenFor(seat.id),
       state: this.#state(now),
     })
     const match = this.#match
@@ -528,12 +646,10 @@ export class Room extends Server<Env> {
       })
       return
     }
-    // A rematch starts from the players who are actually here, so anyone who
-    // drifted off after the last podium does not silently pad the field — which
-    // in knockout would also inflate the number of levels.
-    for (const [id, other] of [...this.#seats]) {
-      if (other.gone || !other.connected) this.#seats.delete(id)
-    }
+    // A match starts from the players who are actually here, so anyone who
+    // drifted off does not silently pad the field — which in knockout would
+    // also inflate the number of levels.
+    this.#dropAbsentSeats()
     const players = this.#players()
     const allowed = canStartMatch(this.#settings, players)
     if (!allowed.ok) {
@@ -672,6 +788,75 @@ export class Room extends Server<Env> {
     this.#tick(now)
   }
 
+  /**
+   * Puts a finished room back in its lobby.
+   *
+   * A room outlives its matches. Without this the phase reached `finished` and
+   * stayed there for as long as the room existed, which made the podium a dead
+   * end: the mode could not be changed in any way the lobby would show, nobody
+   * could set up another match, and the only way to play again with the same
+   * people was for all of them to leave and build a new room around a new code
+   * read aloud again.
+   *
+   * Any player may ask, not just the host. The podium is on everybody's screen
+   * and the room moves through phases together, so making this the host's
+   * privilege would mean a room whose host has wandered off is a room nobody
+   * can restart — the same dead end by a different route.
+   */
+  #onRematch(connection: Connection, now: number): void {
+    if (this.#phase === 'lobby') return
+    if (this.#phase !== 'finished') {
+      this.#send(connection, {
+        t: 'error',
+        code: 'match-in-progress',
+        message: 'That match is still running.',
+      })
+      return
+    }
+    this.#returnToLobby(now)
+  }
+
+  /**
+   * Discards the finished match and leaves a lobby behind.
+   *
+   * Everything a match decided goes with it. Scores, eliminations, the podium,
+   * the schedule and the knockout roster are all derived from `#match`, so
+   * dropping it is what makes the next match a new one rather than a
+   * continuation: nobody starts the rematch already knocked out, and the
+   * knockout length is recomputed from whoever is in the room when it starts.
+   *
+   * What survives is the room itself — its code, its settings, and the people
+   * still connected. Settings survive because a rematch is nearly always the
+   * same game again, and changing the mode is one tap away in the lobby.
+   * Players who left or dropped do not, both so the field is honest and so
+   * their slots are free for somebody new.
+   */
+  #returnToLobby(now: number): void {
+    this.#dropAbsentSeats()
+    this.#match = null
+    this.#podium = null
+    this.#phase = 'lobby'
+    this.#phaseStartedAt = now
+    this.#phaseEndsAt = null
+    this.#ready.clear()
+    this.#levelStartedAt.clear()
+    this.#dirty.clear()
+    this.#stopPump()
+    for (const seat of this.#seats.values()) seat.progress = 0
+    // The host may have been one of the people who just left.
+    this.#reseatHost()
+    this.#broadcastState(now)
+    this.#persistSoon()
+    this.#arm(now)
+  }
+
+  /** Clears out the seats of players who are no longer in the room. */
+  #dropAbsentSeats(): void {
+    for (const seat of [...this.#seats.values()]) {
+      if (seat.gone || !seat.connected) this.#removeSeat(seat)
+    }
+  }
+
   #onLeave(connection: Connection, seat: Seat, now: number): void {
     this.#retire(seat, now)
     this.#broadcastState(now)
@@ -699,8 +884,10 @@ export class Room extends Server<Env> {
     seat.disconnectedAt = now
     seat.progress = 0
     this.#ready.delete(seat.id)
+    if (seat.connectionId !== null) this.#byConnection.delete(seat.connectionId)
+    seat.connectionId = null
     if (this.#match) this.#match = applyLeave(this.#match, seat.id)
-    if (this.#phase === 'lobby') this.#seats.delete(seat.id)
+    if (this.#phase === 'lobby') this.#removeSeat(seat)
     this.#reseatHost()
   }
 
@@ -1085,9 +1272,16 @@ export class Room extends Server<Env> {
    *
    * Cheap and idempotent, and the only thing standing between a long match and
    * having its code recycled underneath it.
+   *
+   * A room with nobody in it deliberately says nothing. The heartbeat is what
+   * promotes a one-minute reservation into a room holding its code for half an
+   * hour, and an empty room has not earned that: a socket that connects and
+   * never joins would otherwise be enough to park a code for thirty minutes at
+   * a time. This room closes and releases its code a minute after its last
+   * connection anyway, so silence costs a real room nothing.
    */
   async #touchRegistry(now: number, force: boolean): Promise<void> {
-    if (this.#closed) return
+    if (this.#closed || this.#seats.size === 0) return
     if (!force && now - this.#registryTouchedAt < REGISTRY_HEARTBEAT_MS) return
     this.#registryTouchedAt = now
     try {
@@ -1150,6 +1344,7 @@ export class Room extends Server<Env> {
         id: seat.id,
         name: seat.name,
         joinedAt: seat.joinedAt,
+        token: this.#keyring.tokenFor(seat.id),
         disconnectedAt: seat.disconnectedAt,
       })),
       match: this.#match,

@@ -18,10 +18,23 @@
  *    milliseconds, and every elapsed time in a result is measured by the server
  *    between the level start it broadcast and the claim it accepted. Clients
  *    send their own clock only as a diagnostic; it never decides a race.
+ *
+ * A third decision follows from the first two. Identity on this wire is split:
+ * a `PlayerId` is a public handle that appears in every broadcast and grants
+ * nothing, and a seat is resumed only with the secret token the server hands its
+ * owner in `welcome` and shows to nobody else. Anything a player can read about
+ * somebody else must therefore be useless for pretending to be them.
  */
 
-/** Bumped whenever a message shape changes incompatibly. Checked on join. */
-export const PROTOCOL_VERSION = 1
+/**
+ * Bumped whenever a message shape changes incompatibly. Checked on join.
+ *
+ * 2: the join handshake carries a server-issued seat token, and a `PlayerId` no
+ * longer resumes anything. A client from before the change would be handed a
+ * fresh seat on its first reconnect instead of its match, so it is told to
+ * reload rather than allowed to lose a game halfway through.
+ */
+export const PROTOCOL_VERSION = 2
 
 /** Hard cap on room size. The host starts the match; the room never auto-starts. */
 export const MAX_PLAYERS = 8
@@ -55,13 +68,35 @@ export type RoomCode = string & { readonly __brand: 'RoomCode' }
 /**
  * Identifies one player for the lifetime of a room.
  *
- * The party server mints this from the connection, so it is opaque to the
- * client and stable across a reconnect within the same room. A plain alias
- * rather than a brand: mixing a player id up with another string is a bug the
- * type system cannot usefully prevent, and the brand would cost every call
- * site a cast.
+ * A public handle and nothing more. The server mints it, every client in the
+ * room is shown it inside `RoomState.players`, and knowing one confers no
+ * ability whatsoever: it is not derived from anything the owner holds and it is
+ * never accepted as proof of who is sending a message. Seat ownership is proved
+ * with `SeatToken`, which is broadcast to nobody.
+ *
+ * A plain alias rather than a brand: mixing a player id up with another string
+ * is a bug the type system cannot usefully prevent, and the brand would cost
+ * every call site a cast.
  */
 export type PlayerId = string
+
+/**
+ * The secret that proves a connection owns a seat.
+ *
+ * Minted by the server when a player first joins, sent once to that player in
+ * their own `welcome`, and never included in any broadcast, any `RoomState` or
+ * any error. A client presents it on every subsequent join so that a reconnect
+ * or a reload returns to the same seat, with the same score and the same place
+ * in the match, rather than arriving as a stranger.
+ *
+ * Because it is the only thing that resumes a seat, it is also the only thing
+ * that must stay private. Room codes are read aloud, names are shown on screen
+ * and player ids are broadcast; none of them may be usable in its place.
+ */
+export type SeatToken = string
+
+/** Rejects a token long enough to be an attempt at something other than a token. */
+export const MAX_TOKEN_LENGTH = 128
 
 /** The party room name. Always equal to the room code. */
 export type RoomId = string
@@ -284,6 +319,13 @@ export type RoomErrorCode =
   | 'version-mismatch'
   | 'room-full'
   | 'match-in-progress'
+  /**
+   * The seat this connection was holding has been taken over by another
+   * connection presenting the same seat token — so, by its owner. Sent as a
+   * close reason rather than as an error frame: by the time it is decided,
+   * this connection is no longer the one the room is talking to.
+   */
+  | 'superseded'
   | 'not-host'
   | 'not-enough-players'
   | 'bad-name'
@@ -294,8 +336,13 @@ export type RoomErrorCode =
   | 'server-error'
 
 export type ClientMessage =
-  /** First message on a connection. `v` lets the server reject an outdated client. */
-  | { t: 'join'; v: number; name: string }
+  /**
+   * First message on a connection. `v` lets the server reject an outdated
+   * client. `token` is the seat token from a previous `welcome` in this room,
+   * and is the only way back into an occupied seat; a join without one is
+   * always a new player, and is refused outright once a match is under way.
+   */
+  | { t: 'join'; v: number; name: string; token?: SeatToken }
   | { t: 'name'; name: string }
   /** Host only; rejected with `not-host` from anyone else. */
   | { t: 'settings'; settings: RoomSettings }
@@ -306,13 +353,23 @@ export type ClientMessage =
   | { t: 'solved'; claim: SolutionClaim; clientMs: number }
   /** Interlude only: lets a room skip the remaining pause once everyone is ready. */
   | { t: 'ready' }
+  /**
+   * Finished only: puts the room back in its lobby so another match can be set
+   * up. Any player in the room may ask, not just the host — the podium is on
+   * everyone's screen and the room moves on together.
+   */
+  | { t: 'rematch' }
   /** A deliberate exit, as opposed to a dropped connection. */
   | { t: 'leave' }
   | { t: 'ping'; at: number }
 
 export type ServerMessage =
-  /** Always the first message on a connection. */
-  | { t: 'welcome'; v: number; you: PlayerId; state: RoomState }
+  /**
+   * Always the first message on a connection, and the only frame that carries a
+   * secret. `token` goes to this connection alone: it is what lets its owner —
+   * and nobody else — come back to `you` after a drop or a reload.
+   */
+  | { t: 'welcome'; v: number; you: PlayerId; token: SeatToken; state: RoomState }
   | { t: 'state'; state: RoomState }
   /** The match is about to begin; `startsAt` is server epoch ms. */
   | { t: 'countdown'; startsAt: number }
@@ -419,9 +476,18 @@ export const parseClientMessage = (raw: unknown): ClientMessage | null => {
   if (!isRecord(value)) return null
   switch (value.t) {
     case 'join': {
-      const { v, name } = value
+      const { v, name, token } = value
       if (!isInt(v) || typeof name !== 'string') return null
-      return { t: 'join', v, name: sanitizeName(name) }
+      const join: Extract<ClientMessage, { t: 'join' }> = { t: 'join', v, name: sanitizeName(name) }
+      // A token is either presented or it is not. An unusable one is dropped
+      // here rather than passed on, so the join handler has one question to ask
+      // — does this token name a seat — instead of two. The length bound is
+      // what keeps a megabyte of "token" from being a way to make the server
+      // hash and compare a megabyte.
+      if (typeof token !== 'string' || token.length === 0 || token.length > MAX_TOKEN_LENGTH) {
+        return join
+      }
+      return { ...join, token }
     }
     case 'name': {
       const { name } = value
@@ -447,6 +513,8 @@ export const parseClientMessage = (raw: unknown): ClientMessage | null => {
     }
     case 'ready':
       return { t: 'ready' }
+    case 'rematch':
+      return { t: 'rematch' }
     case 'leave':
       return { t: 'leave' }
     case 'ping': {

@@ -26,7 +26,7 @@ import type { LevelVaultSnapshot } from './levels'
  */
 
 /** Bumped when the stored shape changes. A mismatch is discarded, not migrated. */
-export const SNAPSHOT_VERSION = 1
+export const SNAPSHOT_VERSION = 2
 
 /** The storage key holding the whole snapshot. One key, one round trip. */
 export const SNAPSHOT_KEY = 'room'
@@ -36,6 +36,18 @@ export type SeatSnapshot = {
   id: PlayerId
   name: string
   joinedAt: number
+  /**
+   * The seat's resume token.
+   *
+   * Written because an eviction is precisely when a resume matters: every
+   * socket died with the previous instance and every player is about to
+   * reconnect. A restored room that had forgotten its tokens would greet its
+   * own players as strangers and refuse them for having a match in progress.
+   *
+   * This is the one secret in the snapshot. It never leaves storage except to
+   * go back to the seat it belongs to.
+   */
+  token: string
   /** Server epoch ms of the drop that started the reconnect grace, or null. */
   disconnectedAt: number | null
 }
@@ -67,13 +79,17 @@ const isPhase = (value: unknown): value is RoomPhase =>
 
 const decodeSeat = (value: unknown): SeatSnapshot | null => {
   if (!isRecord(value)) return null
-  const { id, name, joinedAt, disconnectedAt } = value
+  const { id, name, joinedAt, token, disconnectedAt } = value
   if (typeof id !== 'string' || typeof name !== 'string') return null
   if (typeof joinedAt !== 'number') return null
   return {
     id,
     name,
     joinedAt,
+    // An empty token is a seat nobody can resume, which is the safe direction
+    // to fail in: the player rejoins as a newcomer rather than a stranger
+    // arriving in their seat.
+    token: typeof token === 'string' ? token : '',
     disconnectedAt: typeof disconnectedAt === 'number' ? disconnectedAt : null,
   }
 }

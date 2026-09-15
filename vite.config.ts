@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
@@ -39,28 +39,141 @@ export const MULTIPLAYER_CHUNK_NAME = 'multiplayer'
 export const EAGER_MULTIPLAYER_MODULE = 'src/multiplayer/connection.ts'
 
 /**
- * Module ids that belong to the multiplayer feature: its own source, its
- * screens, and the WebSocket client it is the only consumer of. `[\\/]` rather
- * than `/` so the patterns hold when the build runs on Windows.
- *
- * Nothing shared with single-player appears here, and that is the point. The
- * board core, the reducer, the store and `src/ui` stay in the main chunk where
- * they already are; a multiplayer session imports them from there rather than
- * carrying a second copy of the game.
+ * The module the document loads, and the root of everything every install
+ * downloads before it runs a line of application code.
  */
-export const MULTIPLAYER_MODULE_TEST =
-  /[\\/](?:src[\\/]multiplayer[\\/]|src[\\/]screens[\\/]Multiplayer|partysocket[\\/])/
+export const APP_ENTRY = 'src/main.tsx'
 
 /**
- * True when every module in a chunk belongs to multiplayer.
+ * The lazily-imported module the whole multiplayer feature hangs off — the
+ * target of the single `import(...)` in `src/routes/multiplayer.tsx`.
  *
- * Deliberately not "any module": a chunk that mixed feature code with shared
- * code would be one the main bundle has to import, and renaming it would hide
- * that rather than fix it. Such a chunk should fail the offline guard, not be
- * quietly excluded from the precache.
+ * Ownership of the feature is derived from this one file by walking the
+ * bundler's own module graph, rather than from a list of paths. A path list has
+ * to be edited every time a file moves, and when it is not, the failure is
+ * silent: modules quietly stop being recognised, the chunk falls back to a
+ * different name and the service worker precaches the lot. A graph walk cannot
+ * drift, because it asks the same question the bundler does.
  */
-const isMultiplayerChunk = (moduleIds: readonly string[]): boolean =>
-  moduleIds.length > 0 && moduleIds.every((id) => MULTIPLAYER_MODULE_TEST.test(id))
+export const MULTIPLAYER_ENTRY = 'src/screens/MultiplayerScreen.tsx'
+
+/**
+ * A module graph, expressed as the two questions ownership depends on. Modelled
+ * as functions so the rule below is a pure function of a graph and can be
+ * exercised on a synthetic one, rather than only by running a build.
+ */
+export type ImportGraph = {
+  /** Entry modules. Everything statically reachable from one ships eagerly. */
+  entries: readonly string[]
+  /** Roots of the feature being isolated; each is reached only by `import(...)`. */
+  featureEntries: readonly string[]
+  /** Ids imported with a static `import`, which are edges within a chunk graph. */
+  staticImportsOf: (id: string) => readonly string[]
+  /** Ids imported at all, statically or dynamically. */
+  allImportsOf: (id: string) => readonly string[]
+}
+
+/** Every id reachable from `roots` by following `next`. */
+const closure = (
+  roots: readonly string[],
+  next: (id: string) => readonly string[],
+): Set<string> => {
+  const seen = new Set<string>()
+  const queue = [...roots]
+  for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    queue.push(...next(id))
+  }
+  return seen
+}
+
+/**
+ * The modules that belong to the feature and to nothing else.
+ *
+ * Defined by subtraction: everything reachable from the feature's lazy entry,
+ * minus everything already reachable from an entry point by a static import.
+ * That subtraction is what keeps shared code shared — the board core, the game
+ * store, `src/ui`, React itself and the connectivity probe on the home screen
+ * are all in the eager closure, so a multiplayer session imports them from the
+ * main chunk instead of carrying a second copy. The walk stops at an eager
+ * module rather than descending through it, because a module the main bundle
+ * already has brings its own dependencies with it.
+ */
+export const featureOwnedModules = (graph: ImportGraph): ReadonlySet<string> => {
+  const eager = closure(graph.entries, graph.staticImportsOf)
+  const shared = (id: string): boolean => eager.has(id)
+  return closure(
+    graph.featureEntries.filter((id) => !shared(id)),
+    (id) => graph.allImportsOf(id).filter((imported) => !shared(imported)),
+  )
+}
+
+/** Module ids are absolute paths, Windows-separated on Windows and often suffixed. */
+const modulePath = (id: string): string => {
+  const [bare] = id.split('\\').join('/').split('?')
+  return bare ?? ''
+}
+
+const isModule = (id: string, repoRelative: string): boolean =>
+  modulePath(id).endsWith(`/${repoRelative}`)
+
+/**
+ * Computes multiplayer's ownership from the graph the bundler just built, and
+ * answers whether a chunk is wholly multiplayer's.
+ *
+ * "Wholly" is deliberate, and stricter than "contains any": a chunk mixing
+ * feature code with shared code is one the main bundle has to import, and
+ * renaming it would hide that rather than fix it. Such a chunk keeps the
+ * default name and gets precached, which is wrong but loudly wrong — the
+ * offline guard fails on it instead of quietly shipping a broken install.
+ */
+const multiplayerOwnership = (): {
+  plugin: Plugin
+  isMultiplayerChunk: (moduleIds: readonly string[]) => boolean
+} => {
+  let owned: ReadonlySet<string> = new Set()
+
+  const plugin: Plugin = {
+    name: 'meowdoku:multiplayer-ownership',
+    buildEnd() {
+      const ids = [...this.getModuleIds()]
+
+      // Web workers are bundled by a separate pass over the same plugin list,
+      // and that pass contains neither entry. It has nothing to classify, and
+      // must not clear a classification the application pass established.
+      if (!ids.some((id) => isModule(id, APP_ENTRY))) return
+
+      const featureEntries = ids.filter((id) => isModule(id, MULTIPLAYER_ENTRY))
+      if (featureEntries.length === 0) {
+        throw new Error(
+          `${MULTIPLAYER_ENTRY} is not in the module graph, so no chunk can be recognised as ` +
+            'multiplayer and the service worker would precache the feature for every ' +
+            'single-player install. Point MULTIPLAYER_ENTRY at the module the multiplayer ' +
+            'route lazily imports.',
+        )
+      }
+
+      owned = featureOwnedModules({
+        entries: ids.filter((id) => this.getModuleInfo(id)?.isEntry === true),
+        featureEntries,
+        staticImportsOf: (id) => this.getModuleInfo(id)?.importedIds ?? [],
+        allImportsOf: (id) => {
+          const info = this.getModuleInfo(id)
+          return [...(info?.importedIds ?? []), ...(info?.dynamicallyImportedIds ?? [])]
+        },
+      })
+    },
+  }
+
+  return {
+    plugin,
+    isMultiplayerChunk: (moduleIds) =>
+      moduleIds.length > 0 && moduleIds.every((id) => owned.has(id)),
+  }
+}
+
+const multiplayer = multiplayerOwnership()
 
 /**
  * Service worker generation, exported so it can be asserted on.
@@ -96,6 +209,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
   },
   plugins: [
+    multiplayer.plugin,
     tanstackRouter({ target: 'react', autoCodeSplitting: false }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
@@ -132,12 +246,20 @@ export default defineConfig({
   worker: { format: 'es' },
   build: {
     target: 'es2022',
+    // One stylesheet, and splitting it would not change that. Tailwind compiles
+    // the whole scanned utility surface into the single sheet `src/main.tsx`
+    // imports, so there is nothing per-chunk to separate: turning code splitting
+    // on emits the same file, byte for byte. The multiplayer-only utilities in
+    // it are worth roughly 0.7 kB gzipped of a ~7.9 kB sheet, and prising them
+    // out would mean a second stylesheet and a second request for a saving
+    // smaller than one HTTP round trip. tests/unit/offline-guard.test.ts caps
+    // the sheet so that "small enough to ignore" has to stay true.
     cssCodeSplit: false,
     reportCompressedSize: true,
     rollupOptions: {
       output: {
         chunkFileNames: (chunk) =>
-          isMultiplayerChunk(chunk.moduleIds)
+          multiplayer.isMultiplayerChunk(chunk.moduleIds)
             ? `assets/${MULTIPLAYER_CHUNK_NAME}-[hash].js`
             : 'assets/[name]-[hash].js',
       },

@@ -171,6 +171,11 @@ export type MultiplayerStore = {
   startMatch: () => void
   /** Skips the rest of an interlude once everyone has said so. */
   markReady: () => void
+  /**
+   * Asks a finished room to go back to its lobby so another match can be set
+   * up. Any player in the room may; the server ignores it in any other phase.
+   */
+  rematch: () => void
   dispatch: (action: GameAction) => void
   dismissNotice: () => void
   /** Drops all multiplayer state. Called on leaving and by tests. */
@@ -225,6 +230,7 @@ const initialState = {
   | 'updateSettings'
   | 'startMatch'
   | 'markReady'
+  | 'rematch'
   | 'dispatch'
   | 'dismissNotice'
   | 'reset'
@@ -280,8 +286,39 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
     pendingClaim = null
   }
 
+  /**
+   * Forgets the board and everything else scoped to one match.
+   *
+   * A room outlives its matches, so this has to be a real erasure rather than a
+   * tidy-up. `openLevelAt` skips a level it believes is already open, and it
+   * decides that by comparing level numbers — so a board left behind by the
+   * previous match would be reused, already solved, if the next match's
+   * schedule happened to repeat one of its level numbers.
+   */
+  const clearLocalMatch = (): void => {
+    levelToken++
+    sentProgress = -1
+    pendingClaim = null
+    set({
+      myLevelIndex: -1,
+      level: null,
+      game: null,
+      loadingLevel: false,
+      levelError: null,
+      levelStartedAt: null,
+      levelDeadlineAt: null,
+      matchStartsAt: null,
+      accepted: null,
+      lastResult: null,
+    })
+  }
+
   /** Flattens a server snapshot into the fields selectors read. */
   const applyRoomState = (state: RoomState): void => {
+    // A room that has gone back to its lobby has thrown its match away, and so
+    // must this client: the board in front of the player belongs to a match
+    // that no longer exists, and the standings beside it are already zeroed.
+    if (state.phase === 'lobby' && get().phase !== 'lobby') clearLocalMatch()
     set({
       room: state,
       code: state.code,
@@ -316,6 +353,16 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
    * Idempotent on the level already in play, which is what makes a reconnect
    * resume rather than restart: the board is local, so a player who drops and
    * returns mid-level finds their cells exactly where they left them.
+   *
+   * Opening a *different* level drops the old board in the same breath as it
+   * moves `myLevelIndex`, and that pairing is load-bearing. Generating a level
+   * is always asynchronous — even a cache hit resolves a promise — so between
+   * the two there is at least one render, and anything reading the pair would
+   * otherwise see the new level's number beside the old level's cells. For the
+   * board that is a flicker; for the progress bar, which is cats over board
+   * size, it is a full bar at the moment the player has placed nothing. "Not
+   * started" is the truth while a board is being built, so nothing is left
+   * behind for it to be read from.
    */
   const openLevelAt = async (levelIndex: number): Promise<void> => {
     const { schedule, preferences, game, myLevelIndex } = get()
@@ -327,7 +374,15 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
     const token = ++levelToken
     sentProgress = -1
     pendingClaim = null
-    set({ myLevelIndex: levelIndex, loadingLevel: true, levelError: null, accepted: null })
+    set({
+      myLevelIndex: levelIndex,
+      level: null,
+      game: null,
+      loadingLevel: true,
+      levelError: null,
+      levelStartedAt: null,
+      accepted: null,
+    })
     try {
       const level = await loadLevel(spec.levelNumber)
       if (token !== levelToken) return
@@ -403,6 +458,11 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
         set({ matchStartsAt: message.startsAt })
         break
       case 'match': {
+        // A schedule is published once per match, so this frame is the one
+        // unambiguous "a new match is starting" signal there is — including
+        // when a room goes straight from a podium into another match without
+        // passing through its lobby.
+        clearLocalMatch()
         set({
           schedule: message.schedule,
           levelCount: message.levelCount,
@@ -551,6 +611,10 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
       client?.send({ t: 'ready' })
     },
 
+    rematch: () => {
+      client?.send({ t: 'rematch' })
+    },
+
     dispatch: (action) => {
       const previous = get().game
       if (previous === null) return
@@ -602,14 +666,31 @@ export const selectIsHost = (state: MultiplayerStore): boolean =>
   state.playerId !== null && state.playerId === state.hostId
 
 /**
- * True when the host may start.
+ * True when the host may start a match right now.
  *
- * The rule lives in `canStartMatch` so the button and the server agree; a
+ * Who is allowed lives in `canStartMatch` so the button and the server agree; a
  * lobby that offers Start when the server would refuse it is worse than one
  * that greys the button out a moment too long.
+ *
+ * Two phases qualify, not one. A room outlives its matches: the server accepts
+ * a start from a finished room exactly as it does from a lobby, and gating on
+ * `lobby` alone is what made a podium a dead end for the whole room.
  */
 export const selectCanStart = (state: MultiplayerStore): boolean =>
-  state.phase === 'lobby' && canStartMatch(state.settings, state.players).ok
+  (state.phase === 'lobby' || state.phase === 'finished') &&
+  canStartMatch(state.settings, state.players).ok
+
+/**
+ * True when this client can ask the room for another match.
+ *
+ * Any seated player may ask, not only the host: the podium is on everybody's
+ * screen, and a host who has put their phone down would otherwise strand the
+ * room on it. Only from a finished match, because that is the only phase the
+ * server acts on — and only over a live connection, because a button whose
+ * message is silently dropped is worse than no button at all.
+ */
+export const selectCanRematch = (state: MultiplayerStore): boolean =>
+  state.phase === 'finished' && state.playerId !== null && state.status === 'connected'
 
 export const selectIsFull = (state: MultiplayerStore): boolean =>
   state.players.length >= MAX_PLAYERS

@@ -49,8 +49,11 @@
  */
 
 import { useEffect, useEffectEvent, useState } from 'react'
+import type { GameState } from '../../board/reducer'
 import { catIndices } from '../../board/rules'
 import { isSyncedMode } from '../../multiplayer/match'
+import type { LevelSpec, Player, PlayerId } from '../../multiplayer/protocol'
+import type { ProgressSample } from '../../multiplayer/store'
 import { useMultiplayerStore } from '../../multiplayer/store'
 import { ordinal } from './format'
 import { Collar, Crown } from './icons'
@@ -88,12 +91,57 @@ export type ProgressRaceProps = {
   variant?: ProgressRaceVariant
 }
 
+/** Everything the field is assembled from, as plain values. */
+export type RaceSources = {
+  players: readonly Player[]
+  /** The server's latest word on where everybody is. */
+  progress: Readonly<Record<PlayerId, ProgressSample>>
+  schedule: readonly LevelSpec[] | null
+  playerId: PlayerId | null
+  /** The level this client is on, which in blaze is nobody else's. */
+  myLevelIndex: number
+  /** The board in front of this player, or null while one is being built. */
+  game: GameState | null
+}
+
 /**
  * The field, assembled from the room and from this client's own board.
  *
- * Everyone else comes from the server's progress map; you come from the board
- * in front of you, which is both fresher and unarguable.
+ * Everyone else comes from the server's progress map. You come from the board
+ * in front of you and from nothing else — never from the room's echo of you,
+ * which is a round trip old, and never from a board you are no longer on.
+ *
+ * That second clause is the one that matters. `myLevelIndex` moves the instant
+ * a new level begins while the board for it is still being generated, so the
+ * only pair that is ever consistent is `myLevelIndex` with the board the store
+ * currently holds *for that index* — and while one is being built the store
+ * holds none. No board means no cats placed, which is exactly true: a player
+ * cannot have made progress on a board that does not exist yet. The board size
+ * still comes from the schedule so the denominator is the right one, and the
+ * bar reads "at the start of this level" rather than "finished the last one".
  */
+export const racerInputsFrom = (sources: RaceSources): RacerInput[] =>
+  sources.players.map((player) => {
+    const mine = player.id === sources.playerId
+    const sample = sources.progress[player.id]
+    const levelIndex = mine ? sources.myLevelIndex : (sample?.levelIndex ?? player.levelIndex)
+    const board = mine ? sources.game : null
+    const cats = mine
+      ? board === null
+        ? 0
+        : catIndices(board.cells).length
+      : (sample?.cats ?? player.progress)
+    return {
+      id: player.id,
+      name: player.name,
+      cats,
+      size: board?.size ?? sources.schedule?.[levelIndex]?.size ?? 0,
+      levelIndex,
+      connected: player.connected,
+      eliminatedAtLevel: player.eliminatedAtLevel,
+    }
+  })
+
 const useRacers = (): { racers: Racer[]; shape: RaceShape; resetKey: string } => {
   const players = useMultiplayerStore((state) => state.players)
   const progress = useMultiplayerStore((state) => state.progress)
@@ -106,25 +154,7 @@ const useRacers = (): { racers: Racer[]; shape: RaceShape; resetKey: string } =>
   const game = useMultiplayerStore((state) => state.game)
 
   const shape: RaceShape = { synced: isSyncedMode(settings), levelCount }
-
-  const inputs: RacerInput[] = players.map((player) => {
-    // Your own board beats the server's echo of it: it is a frame old rather
-    // than a round trip old, and it is the one marker a player can check.
-    const mine = player.id === playerId ? game : null
-    const sample = progress[player.id]
-    const levelIndex = mine === null ? (sample?.levelIndex ?? player.levelIndex) : myLevelIndex
-    const cats = mine === null ? (sample?.cats ?? player.progress) : catIndices(mine.cells).length
-    const size = mine === null ? (schedule?.[levelIndex]?.size ?? 0) : mine.size
-    return {
-      id: player.id,
-      name: player.name,
-      cats,
-      size,
-      levelIndex,
-      connected: player.connected,
-      eliminatedAtLevel: player.eliminatedAtLevel,
-    }
-  })
+  const inputs = racerInputsFrom({ players, progress, schedule, playerId, myLevelIndex, game })
 
   // A synced mode puts everyone back on zero at the start of each level, and a
   // bar sliding backwards for two seconds is not an animation anybody wanted;

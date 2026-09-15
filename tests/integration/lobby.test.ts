@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { MAX_PLAYERS, PROTOCOL_VERSION } from '../../src/multiplayer/protocol'
 import { isRoomCode, normaliseRoomCode } from '../../src/multiplayer/roomCode'
+import { ROOM_CREATE_BURST } from '../../party/lib/rateLimit'
 import {
+  HTTP_BASE,
   TestClient,
   allocateRoom,
   closeAllClients,
@@ -9,6 +11,7 @@ import {
   openRoom,
   partyReachable,
   roomExists,
+  tryAllocateRoom,
 } from './harness'
 
 /**
@@ -155,27 +158,58 @@ describe.skipIf(!partyReachable)('lobby', () => {
 
 /**
  * Room codes have to be unique among live rooms, and the only way to know that
- * is to ask for a lot of them at once. Sequential allocation would prove
- * nothing: the interesting case is two hosts pressing Create in the same
- * millisecond, which is exactly what a burst of concurrent POSTs produces.
+ * is to ask for several at once. Sequential allocation would prove nothing: the
+ * interesting case is two hosts pressing Create in the same millisecond, which
+ * is exactly what a burst of concurrent POSTs produces.
+ *
+ * The burst is a dozen rather than the sixty-four it once was, because the
+ * lobby now rations room creation per caller and this whole suite is one
+ * caller. That ceiling is the point of the second test.
  */
 describe.skipIf(!partyReachable)('room codes', () => {
   it('hands out unique codes under concurrent creation', async () => {
-    const batch = 64
+    const batch = 12
     const results = await Promise.all(Array.from({ length: batch }, () => allocateRoom()))
     expect(results).toHaveLength(batch)
     for (const code of results) expect(isRoomCode(code)).toBe(true)
     expect(new Set(results).size).toBe(batch)
     // Every one of them is live, which is what "unique among ongoing sessions"
-    // actually means: the registry is holding all sixty-four at once.
+    // actually means: the registry is holding all twelve at once.
     const live = await Promise.all(results.map((code) => roomExists(code)))
     expect(live.every(Boolean)).toBe(true)
   })
 
-  it('survives repeated bursts without failing a request', async () => {
-    for (let round = 0; round < 3; round++) {
-      const codes = await Promise.all(Array.from({ length: 24 }, () => allocateRoom()))
-      expect(new Set(codes).size).toBe(24)
-    }
+  /**
+   * Creating a room is unauthenticated, and every code comes out of one table
+   * with a hard ceiling on it. Unrationed, a few seconds of requests from a
+   * single client reserved every code the deployment had, and because only a
+   * room object ever released one, every host in the world was refused until
+   * the reservations timed out half an hour later.
+   */
+  it('refuses a flood instead of letting one caller take the code space', async () => {
+    const attempts = await Promise.all(
+      Array.from({ length: ROOM_CREATE_BURST * 3 }, () => tryAllocateRoom()),
+    )
+    const allocated = attempts.filter((attempt) => attempt.code !== null)
+    const refused = attempts.filter((attempt) => attempt.status === 429)
+
+    expect(refused.length).toBeGreaterThan(0)
+    expect(allocated.length).toBeLessThanOrEqual(ROOM_CREATE_BURST)
+    // Nothing is broken by the refusal: the codes that were handed out are real
+    // and live, and the ones that were not are simply not there.
+    for (const attempt of allocated) expect(isRoomCode(attempt.code as string)).toBe(true)
+    expect(new Set(allocated.map((attempt) => attempt.code)).size).toBe(allocated.length)
+  })
+
+  it('tells a rationed caller how long to wait rather than just saying no', async () => {
+    // Drains whatever budget is left, so the refusal below is the limiter's and
+    // not a coincidence.
+    await Promise.all(Array.from({ length: ROOM_CREATE_BURST * 2 }, () => tryAllocateRoom()))
+    const response = await fetch(`${HTTP_BASE}/rooms`, { method: 'POST' })
+    expect(response.status).toBe(429)
+    expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0)
+    const body = (await response.json()) as { error?: unknown; retryAfterMs?: unknown }
+    expect(body.error).toBe('rate-limited')
+    expect(typeof body.retryAfterMs).toBe('number')
   })
 })

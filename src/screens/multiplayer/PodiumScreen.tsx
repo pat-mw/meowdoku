@@ -43,8 +43,13 @@ export type PodiumScreenProps = {
   /** Leaves the room for good. */
   onLeave: () => void
   /**
-   * Returns to the lobby for another match. Omitted when the room cannot be
-   * reused — the button is then simply absent rather than present and dead.
+   * Takes the whole room back to its lobby for another match — it is a request
+   * to the server, not a local navigation, so everybody moves together and the
+   * scores reset for all of them at once. Any player in the room may ask.
+   *
+   * Omitted when the room cannot be reused, which is either a connection that
+   * is down or a client with no seat: the button is then simply absent rather
+   * than present and dead.
    */
   onRematch?: (() => void) | undefined
 }
@@ -70,14 +75,19 @@ export function PodiumScreen({ onLeave, onRematch }: PodiumScreenProps) {
   }, [settled, iWon])
 
   if (podium === null || podium.length === 0) {
+    // A beat between the last level closing and the standings arriving. It
+    // still carries a way out: a room that somehow never sends a podium would
+    // otherwise be a screen with no buttons on it at all.
     return (
       <section
         className="flex flex-1 flex-col items-center justify-center gap-3"
-        role="status"
         style={{ animation: 'mdkFade .25s' }}
       >
-        <CatFace className="h-[72px] w-[72px]" />
-        <div className="text-base font-extrabold text-[var(--mdk-ink-muted)]">adding it up…</div>
+        <div className="flex flex-col items-center gap-3" role="status">
+          <CatFace className="h-[72px] w-[72px]" />
+          <div className="text-base font-extrabold text-[var(--mdk-ink-muted)]">adding it up…</div>
+        </div>
+        <QuietButton onClick={onLeave}>Leave the room</QuietButton>
       </section>
     )
   }
@@ -156,7 +166,7 @@ export function PodiumScreen({ onLeave, onRematch }: PodiumScreenProps) {
 
       <div className="flex flex-none flex-col gap-1">
         {onRematch === undefined ? null : (
-          <PrimaryAction onClick={onRematch}>Back to the lobby</PrimaryAction>
+          <PrimaryAction onClick={onRematch}>Play again</PrimaryAction>
         )}
         <QuietButton onClick={onLeave}>Leave the room</QuietButton>
       </div>

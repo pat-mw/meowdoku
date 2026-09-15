@@ -158,13 +158,24 @@ export const isSyncedMode = (settings: RoomSettings): boolean => settings.mode !
 
 export type MatchPhase = 'countdown' | 'playing' | 'interlude' | 'finished'
 
-/** Why a player stopped competing. */
-export type ExitKind = 'knockout' | 'left'
+/**
+ * Why a player stopped competing.
+ *
+ * `completed` is a finish line, not an exit in the pejorative sense: a blaze
+ * player who has played the whole schedule has nothing left to race on. It has
+ * to be recorded, because otherwise "has done everything the match asked" and
+ * "is still somewhere in the middle of it" are the same absence of a state, and
+ * a finisher who then closes the tab is indistinguishable from a quitter.
+ */
+export type ExitKind = 'completed' | 'knockout' | 'left'
 
 export type Participant = {
   id: PlayerId
   connected: boolean
-  /** 1-based level ordinal at which they stopped competing; null while active. */
+  /**
+   * 1-based level ordinal at which they stopped competing early; null while
+   * they are still competing and for anyone who played the schedule out.
+   */
   exitLevel: number | null
   exit: ExitKind | null
 }
@@ -237,12 +248,22 @@ export const createMatch = (input: CreateMatchInput): MatchState => {
 export const participantOf = (state: MatchState, playerId: PlayerId): Participant | null =>
   state.participants.find((p) => p.id === playerId) ?? null
 
-/** Players still in the running: neither knocked out nor gone. */
+/** Players still racing: not finished, not knocked out, not gone. */
 export const activeParticipants = (state: MatchState): Participant[] =>
   state.participants.filter((p) => p.exit === null)
 
 export const isActive = (state: MatchState, playerId: PlayerId): boolean =>
   participantOf(state, playerId)?.exit === null
+
+/**
+ * Players whose result still stands: still racing, or done with the schedule.
+ *
+ * The distinction from `activeParticipants` is what tells "the match is over
+ * because everyone played it out" apart from "the match is over because the
+ * room emptied", which decide opposite things about who won.
+ */
+const contenders = (state: MatchState): Participant[] =>
+  state.participants.filter((p) => p.exit === null || p.exit === 'completed')
 
 const finishesOf = (state: MatchState, playerId: PlayerId): LevelFinish[] =>
   state.finishes.filter((f) => f.playerId === playerId)
@@ -336,6 +357,16 @@ const appendFinish = (state: MatchState, input: FinishInput): MatchState => {
       state.levelCount - 1,
       Math.max(state.levelIndex, playerLevelIndex(next, input.playerId)),
     )
+    // Crossing the finish line is a terminal state of its own. Without it a
+    // player who has played every level looks exactly like one who is still
+    // going, so leaving the room afterwards — or dropping off a train — would
+    // be recorded as walking out on a match they had already completed, and
+    // rank them below someone who never solved a thing.
+    if (hasFinishedSchedule(next, input.playerId)) {
+      next.participants = next.participants.map((p) =>
+        p.id === input.playerId && p.exit === null ? { ...p, exit: 'completed' } : p,
+      )
+    }
   }
   return next
 }
@@ -372,25 +403,74 @@ export const applyReconnect = (state: MatchState, playerId: PlayerId): MatchStat
  * Leaving forfeits the level in progress even if a solve for it was already
  * recorded: an absent player must not be able to win a level, take a point, or
  * spare somebody else from a knockout.
+ *
+ * Nothing is forfeited by a player who had already stopped competing. Someone
+ * who played the schedule out, or was knocked out, keeps the standing they
+ * earned; and once the match itself is over there is no longer anything to
+ * forfeit, so closing the podium screen cannot cost anyone their place.
  */
-export const applyLeave = (state: MatchState, playerId: PlayerId): MatchState => ({
-  ...state,
-  participants: state.participants.map((p) =>
-    p.id === playerId && p.exit === null
-      ? {
-          ...p,
-          connected: false,
-          exit: 'left',
-          exitLevel: Math.min(state.levelCount, playerLevelIndex(state, playerId) + 1),
-        }
-      : p,
-  ),
-})
+export const applyLeave = (state: MatchState, playerId: PlayerId): MatchState => {
+  if (state.phase === 'finished') return state
+  return {
+    ...state,
+    participants: state.participants.map((p) =>
+      p.id === playerId && p.exit === null
+        ? {
+            ...p,
+            connected: false,
+            exit: 'left',
+            exitLevel: Math.min(state.levelCount, playerLevelIndex(state, playerId) + 1),
+          }
+        : p,
+    ),
+  }
+}
+
+/**
+ * A player's running totals, derived from the recorded finishes.
+ *
+ * Every field is built from what the server itself established — solutions it
+ * verified and times it measured — which is what makes a standing safe to rank
+ * by. It is recomputed from the append-only finishes rather than accumulated,
+ * so a replayed or late message cannot leave a total out of step with the
+ * results it came from.
+ */
+export type Standing = {
+  playerId: PlayerId
+  /** Levels won. Only steady ranks by this. */
+  points: number
+  levelsSolved: number
+  /** Total elapsed across played levels, an unsolved level charged its time limit. */
+  totalTimeMs: number
+  /** 1-based level ordinal at which the player went out early; null otherwise. */
+  eliminatedAtLevel: number | null
+}
+
+export const standingFor = (state: MatchState, playerId: PlayerId): Standing => {
+  const mine = finishesOf(state, playerId)
+  let levelsSolved = 0
+  let totalTimeMs = 0
+  for (const finish of mine) {
+    if (finish.status === 'solved' && finish.elapsedMs !== null) {
+      levelsSolved += 1
+      totalTimeMs += finish.elapsedMs
+    } else {
+      totalTimeMs += levelTimeLimitMs(state, finish.levelIndex)
+    }
+  }
+  return {
+    playerId,
+    points: state.results.filter((r) => r.winnerId === playerId).length,
+    levelsSolved,
+    totalTimeMs,
+    eliminatedAtLevel: participantOf(state, playerId)?.exitLevel ?? null,
+  }
+}
 
 const STATUS_ORDER: Record<FinishStatus, number> = { solved: 0, timeout: 1, abandoned: 2 }
 
 /**
- * Orders two outcomes of the same level, best first.
+ * Orders two outcomes of the same level on the finish alone, best first.
  *
  * Solving beats running out of time, which beats walking away. Among solvers
  * the faster time wins, and when two are equal to the millisecond the finish
@@ -398,11 +478,16 @@ const STATUS_ORDER: Record<FinishStatus, number> = { solved: 0, timeout: 1, aban
  * exists, and picking it is fairer than a coin toss because it is at least the
  * order the room saw.
  *
- * Among players who did not solve, more cats placed ranks higher — which is
- * what decides a level nobody solved, and is the same number the progress bar
- * was showing all along. Equal progress falls back to sequence order, which is
- * deterministic but carries no meaning; by then the two players really are
- * indistinguishable.
+ * `progress` is deliberately absent. It is the count of cats a client says it
+ * has placed — the server holds the solution but never sees the board, so it
+ * has no way to check the number — and a value a player types cannot be
+ * allowed to order the player who typed it. It survives on `LevelFinish`
+ * because a progress bar has to show something; nothing that decides an
+ * outcome may read it.
+ *
+ * Two players who neither solved the level are not separated here at all. What
+ * separates them is their record in the match, which needs the whole state:
+ * see `rankLevelFinishes`.
  */
 export const compareFinishes = (a: LevelFinish, b: LevelFinish): number => {
   const byStatus = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
@@ -411,15 +496,55 @@ export const compareFinishes = (a: LevelFinish, b: LevelFinish): number => {
     const ea = a.elapsedMs ?? Number.POSITIVE_INFINITY
     const eb = b.elapsedMs ?? Number.POSITIVE_INFINITY
     if (ea !== eb) return ea - eb
-    return a.seq - b.seq
   }
-  if (a.progress !== b.progress) return b.progress - a.progress
   return a.seq - b.seq
 }
 
-/** Best to worst. Does not mutate the input. */
-export const rankFinishes = (finishes: readonly LevelFinish[]): LevelFinish[] =>
-  [...finishes].sort(compareFinishes)
+/**
+ * Orders two outcomes of one level on merit, or 0 when nothing separates them.
+ *
+ * Merit is only ever a fact the server established itself: the status it
+ * recorded, the elapsed time it measured between the level start it broadcast
+ * and the solution it verified against its own copy, and — for two players who
+ * both failed to solve — the record they have built over the match out of
+ * exactly those facts. Fewer levels solved is worse; equal levels solved, more
+ * time spent is worse.
+ *
+ * Returning 0 is meaningful and is not a bug to be papered over with a
+ * tiebreak. It says the rules cannot tell these two apart, which is what
+ * `resolveLevel` needs to know before it puts somebody out of a knockout.
+ */
+const compareOnMerit = (state: MatchState, a: LevelFinish, b: LevelFinish): number => {
+  const byStatus = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+  if (byStatus !== 0) return byStatus
+  if (a.status === 'solved' && b.status === 'solved') {
+    const ea = a.elapsedMs ?? Number.POSITIVE_INFINITY
+    const eb = b.elapsedMs ?? Number.POSITIVE_INFINITY
+    return ea === eb ? 0 : ea - eb
+  }
+  const ra = standingFor(state, a.playerId)
+  const rb = standingFor(state, b.playerId)
+  if (ra.levelsSolved !== rb.levelsSolved) return rb.levelsSolved - ra.levelsSolved
+  if (ra.totalTimeMs !== rb.totalTimeMs) return ra.totalTimeMs - rb.totalTimeMs
+  return 0
+}
+
+/**
+ * Ranks one level's finishes, best first. Does not mutate the input.
+ *
+ * Merit first, and arrival order at the server as the last resort, so the
+ * ranking is always a total order even where merit ran out. The state is
+ * required because a level nobody solved can only be ranked by what came
+ * before it.
+ */
+export const rankLevelFinishes = (
+  state: MatchState,
+  finishes: readonly LevelFinish[],
+): LevelFinish[] =>
+  [...finishes].sort((a, b) => {
+    const byMerit = compareOnMerit(state, a, b)
+    return byMerit !== 0 ? byMerit : a.seq - b.seq
+  })
 
 export type LevelEndReason = 'all-finished' | 'deadline' | 'walkover'
 
@@ -441,9 +566,28 @@ export const levelEndReason = (state: MatchState, now: number): LevelEndReason |
 export type MatchEndReason = 'complete' | 'walkover' | 'empty' | 'deadline'
 
 /**
+ * Whether a knockout's last player standing actually won it.
+ *
+ * Earned means the field was thinned by the rules: the level that just closed
+ * put somebody out, and the survivor was in it. A departure recorded after that
+ * level closed means they are alone because the room emptied around them during
+ * the interlude, not because they beat anybody — the title is a walkover, and
+ * the end-of-match screen should say so rather than claim a final that was
+ * never played.
+ */
+const knockoutEarned = (state: MatchState, survivor: Participant): boolean => {
+  const last = state.results[state.results.length - 1]
+  if (last === undefined || last.eliminatedId === null) return false
+  if (!last.ranking.includes(survivor.id)) return false
+  const closedOrdinal = last.levelIndex + 1
+  return !state.participants.some((p) => p.exit === 'left' && (p.exitLevel ?? 0) > closedOrdinal)
+}
+
+/**
  * Whether the match is over, and why.
  *
- *   complete  the schedule ran out, or knockout is down to its survivor
+ *   complete  everyone left in the running played it out, or knockout is down
+ *             to a survivor who earned it
  *   walkover  everyone else left; whoever is still here wins by default
  *   empty     nobody is left at all, so there is no champion
  *   deadline  blaze's backstop, in case a player never finishes or reports
@@ -452,31 +596,33 @@ export type MatchEndReason = 'complete' | 'walkover' | 'empty' | 'deadline'
  * what makes a room that loses players mid-match behave sensibly: if a
  * five-player knockout drops to two, the next level is the final, regardless of
  * how many levels were scheduled when the host pressed start.
+ *
+ * Blaze's is that nobody is still racing. A player who has played the schedule
+ * out is no longer racing but is very much still in the match, so a room where
+ * everyone has finished is `complete` and not `empty` — and a room where one
+ * player is still going carries on, because the finishers' times are banked and
+ * there is a real race left to run against them.
  */
 export const matchEndReason = (state: MatchState, now: number): MatchEndReason | null => {
   if (state.phase === 'finished') return null
+  const standing = contenders(state)
+  if (standing.length === 0) return 'empty'
   const active = activeParticipants(state)
-  if (active.length === 0) return 'empty'
 
   if (state.settings.mode === 'knockout') {
     if (active.length > 1) return null
-    const survivor = active[0] as Participant
-    // A knockout is properly won when the survivor came through a level that
-    // eliminated somebody. If the room merely emptied around them, it is a
-    // walkover, and the end-of-match screen should say so.
-    const last = state.results[state.results.length - 1]
-    const earned =
-      last !== undefined && last.eliminatedId !== null && last.ranking.includes(survivor.id)
-    return earned ? 'complete' : 'walkover'
+    return knockoutEarned(state, active[0] as Participant) ? 'complete' : 'walkover'
   }
 
-  if (active.length === 1 && state.participants.length > 1) return 'walkover'
-
   if (state.settings.mode === 'blaze') {
-    if (active.every((p) => hasFinishedSchedule(state, p.id))) return 'complete'
+    if (active.length === 0) return 'complete'
+    // A lone racer whose every opponent walked out has nothing to race, so the
+    // match is over. One who still has a finisher's time to chase does not.
+    if (standing.length === 1 && state.participants.length > 1) return 'walkover'
     return now >= matchDeadlineAt(state) ? 'deadline' : null
   }
 
+  if (active.length === 1 && state.participants.length > 1) return 'walkover'
   return state.levelIndex >= state.levelCount ? 'complete' : null
 }
 
@@ -489,8 +635,9 @@ export const finishMatch = (state: MatchState): MatchState =>
  *
  * Players who never claimed a finish are given one here: `timeout` if they are
  * still connected and simply did not solve it, `abandoned` if their connection
- * is gone. The caller passes the last progress sample it has for them, so a
- * level nobody solved is still ranked by how far each player got.
+ * is gone. The caller passes the last progress sample it has for each of them,
+ * which is recorded for the end-of-level display only: it is a number the
+ * client chose and nothing that decides an outcome may read it.
  *
  * Returns the state unchanged with a null result for blaze, which has no
  * shared level to close.
@@ -519,21 +666,33 @@ export const resolveLevel = (
 
   // Only players still in the match are ranked: a solve banked by someone who
   // then left the room does not win them the level.
-  const finishes = rankFinishes(
+  const finishes = rankLevelFinishes(
+    next,
     next.finishes.filter((f) => f.levelIndex === levelIndex && isActive(next, f.playerId)),
   )
   const winner = finishes.find((f) => f.status === 'solved') ?? null
 
   let eliminatedId: PlayerId | null = null
   if (state.settings.mode === 'knockout' && finishes.length >= 2) {
-    eliminatedId = (finishes[finishes.length - 1] as LevelFinish).playerId
-    next = {
-      ...next,
-      participants: next.participants.map((p) =>
-        p.id === eliminatedId
-          ? { ...p, exit: 'knockout', exitLevel: levelIndex + 1, connected: p.connected }
-          : p,
-      ),
+    const last = finishes[finishes.length - 1] as LevelFinish
+    const above = finishes[finishes.length - 2] as LevelFinish
+    // Somebody goes out only if the rules can say why. Where the bottom two
+    // are level on everything the server verified — typically two players who
+    // have solved nothing at all and did not solve this one either — the
+    // ranking's last place is arrival order and nothing more, and putting a
+    // player out of a match on it would be a coin toss wearing a rule's
+    // clothes. The level eliminates nobody, the schedule shortens by one
+    // elimination, and the podium separates whoever is left on their record.
+    if (compareOnMerit(next, above, last) !== 0) {
+      eliminatedId = last.playerId
+      next = {
+        ...next,
+        participants: next.participants.map((p) =>
+          p.id === eliminatedId
+            ? { ...p, exit: 'knockout', exitLevel: levelIndex + 1, connected: p.connected }
+            : p,
+        ),
+      }
     }
   }
 
@@ -570,39 +729,6 @@ export const beginLevel = (state: MatchState, now: number): MatchState => {
   return { ...state, phase: 'playing', levelStartedAt: now }
 }
 
-/** A player's running totals, derived from the recorded finishes. */
-export type Standing = {
-  playerId: PlayerId
-  /** Levels won. Only steady ranks by this. */
-  points: number
-  levelsSolved: number
-  /** Total elapsed across played levels, an unsolved level charged its time limit. */
-  totalTimeMs: number
-  /** 1-based level ordinal at which the player went out; null while still in. */
-  eliminatedAtLevel: number | null
-}
-
-export const standingFor = (state: MatchState, playerId: PlayerId): Standing => {
-  const mine = finishesOf(state, playerId)
-  let levelsSolved = 0
-  let totalTimeMs = 0
-  for (const finish of mine) {
-    if (finish.status === 'solved' && finish.elapsedMs !== null) {
-      levelsSolved += 1
-      totalTimeMs += finish.elapsedMs
-    } else {
-      totalTimeMs += levelTimeLimitMs(state, finish.levelIndex)
-    }
-  }
-  return {
-    playerId,
-    points: state.results.filter((r) => r.winnerId === playerId).length,
-    levelsSolved,
-    totalTimeMs,
-    eliminatedAtLevel: participantOf(state, playerId)?.exitLevel ?? null,
-  }
-}
-
 /** The sequence number of a player's last recorded finish; Infinity if they have none. */
 const lastSeq = (state: MatchState, playerId: PlayerId): number => {
   let seq = Number.POSITIVE_INFINITY
@@ -612,10 +738,17 @@ const lastSeq = (state: MatchState, playerId: PlayerId): number => {
   return seq
 }
 
-const exitRank = (participant: Participant | null): number => {
-  if (!participant || participant.exit === null) return 0
-  return participant.exit === 'knockout' ? 1 : 2
-}
+/**
+ * How far a player's exit drops them, before anything else is compared.
+ *
+ * Playing the schedule out costs nothing — it is the opposite of giving up, so
+ * it ranks alongside still being in the match and the score decides between
+ * them. Being knocked out ranks below either, and walking out ranks below that.
+ */
+const EXIT_ORDER: Record<ExitKind, number> = { completed: 0, knockout: 1, left: 2 }
+
+const exitRank = (participant: Participant | null): number =>
+  participant && participant.exit !== null ? EXIT_ORDER[participant.exit] : 0
 
 /**
  * The final standings, best first.
@@ -635,10 +768,14 @@ const exitRank = (participant: Participant | null): number => {
  *
  *   KNOCKOUT  the survivor first, then the reverse of the elimination order:
  *             last out is second. Nothing else can order a knockout, because
- *             players who went out early never played the later levels.
+ *             players who went out early never played the later levels. Two
+ *             players who went out at the same level — one eliminated, one who
+ *             walked — are separated by how they went, then by their record.
  *
  * In every mode a player who left the room ranks below one who stayed. They
- * forfeited; a walkover is not a win over someone who is still playing.
+ * forfeited; a walkover is not a win over someone who is still playing. A
+ * player who played the schedule out and only then left has forfeited nothing,
+ * which is why finishing is a state of its own and not the absence of one.
  */
 export const matchPodium = (state: MatchState): PodiumEntry[] => {
   const mode = state.settings.mode

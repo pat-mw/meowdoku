@@ -225,19 +225,29 @@ test.describe('multiplayer, two browsers', () => {
     await expect(guestPage.getByRole('button', { name: 'Start match' })).toHaveCount(0)
 
     // The shortest match this room can play: three small boards, no pauses.
-    await page
+    // Each choice is confirmed on the host's own screen before the next one is
+    // made. A radio here is a button whose checked state comes back from the
+    // room rather than from the browser, so an unconfirmed click is not merely
+    // slow to show — it may never have been sent at all, and checking here is
+    // what tells a failure further down which side of the socket went wrong.
+    const hostMode = page.getByRole('radiogroup', { name: 'Mode' })
+    await hostMode.getByRole('radio', { name: /^Blaze/ }).click()
+    await expect(hostMode.getByRole('radio', { name: /^Blaze/ })).toBeChecked()
+    const hostLevels = page.getByRole('radiogroup', { name: 'Levels' })
+    await hostLevels.getByRole('radio', { name: '3' }).click()
+    await expect(hostLevels.getByRole('radio', { name: '3' })).toBeChecked()
+    const hostDifficulty = page.getByRole('radiogroup', { name: 'Difficulty' })
+    await hostDifficulty.getByRole('radio', { name: 'Easy' }).click()
+    await expect(hostDifficulty.getByRole('radio', { name: 'Easy' })).toBeChecked()
+    // The guest sees the host's choices without being able to press them. This
+    // one waits longer than the default because it is the first assertion in
+    // the test that has to cross the socket twice — host to room, room to guest
+    // — which every other cross-socket wait here is also given room for.
+    const guestBlaze = guestPage
       .getByRole('radiogroup', { name: 'Mode' })
       .getByRole('radio', { name: /^Blaze/ })
-      .click()
-    await page.getByRole('radiogroup', { name: 'Levels' }).getByRole('radio', { name: '3' }).click()
-    await page
-      .getByRole('radiogroup', { name: 'Difficulty' })
-      .getByRole('radio', { name: 'Easy' })
-      .click()
-    // The guest sees the host's choices without being able to press them.
-    await expect(
-      guestPage.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: /^Blaze/ }),
-    ).toBeChecked()
+    await expect(guestBlaze).toBeChecked({ timeout: 20_000 })
+    await expect(guestBlaze).toBeDisabled()
 
     await start.click()
 
@@ -245,10 +255,16 @@ test.describe('multiplayer, two browsers', () => {
     await solveVisibleLevel(page)
 
     // Ada is a whole board ahead, and Bo's race strip says so — which is the
-    // entire point of the strip.
-    await expect(guestPage.getByLabel('Race progress').getByText('Ada')).toBeVisible({
-      timeout: 20_000,
-    })
+    // entire point of the strip. The assertion reads the strip's spoken
+    // standings rather than its headline, because that line carries the two
+    // things being claimed in one string: who leads, and which level they are
+    // on. The visible headline only names the leader, and matching a bare name
+    // inside the strip is ambiguous anyway — the name appears in the headline
+    // and again in the standings.
+    await expect(guestPage.getByLabel('Race progress').getByRole('listitem').first()).toHaveText(
+      /^1st: Ada, \d+ cats placed on level 2$/,
+      { timeout: 20_000 },
+    )
 
     await solveVisibleLevel(guestPage)
     await solveVisibleLevel(page)
