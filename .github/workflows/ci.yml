@@ -24,8 +24,11 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      # Build before the tests, not after: the offline guard inspects the built
+      # output to prove the multiplayer chunk is not precached, so a run with no
+      # dist/ either fails or — worse, locally — validates a stale one.
       - run: pnpm build
+      - run: pnpm test
       - uses: actions/upload-artifact@v4
         with:
           name: dist
