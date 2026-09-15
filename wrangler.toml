@@ -1,0 +1,58 @@
+# The Meowdoku party server.
+#
+# Deployed on its own, separately from the Vercel frontend: the app is static
+# and offline-first, the party server is a stateful WebSocket origin, and the
+# two have no build-time relationship at all. The only thing that ties them
+# together is the host name the client is given in VITE_PARTY_HOST, and the
+# Content-Security-Policy on the frontend that names this origin.
+#
+#   pnpm party:dev      run locally on http://127.0.0.1:8787
+#   pnpm party:deploy   publish to Cloudflare
+
+name = "meowdoku-party"
+main = "party/server.ts"
+
+# Pinned to the workerd build that ships with the pinned wrangler. Raising it is
+# a deliberate act: compatibility dates change runtime behaviour.
+compatibility_date = "2026-09-11"
+
+workers_dev = true
+
+[observability]
+enabled = true
+
+# Generating a board is the only expensive thing a room does. Measured on the
+# multiplayer bands it costs 1-113 ms and happens at most once per level per
+# room, but the default budget leaves no headroom for a cold room replaying
+# several levels after an eviction. Note this is above the Workers Free CPU
+# allowance: the party server needs the Workers Paid plan.
+[limits]
+cpu_ms = 5000
+
+# One object per room code. Addressed by `idFromName(code)`, which is why the
+# Worker canonicalises the code before routing — otherwise "abc12" and "ABC12"
+# would be two rooms sharing one spoken code.
+[[durable_objects.bindings]]
+name = "Room"
+class_name = "Room"
+
+# The singleton that decides which codes are in use. A room cannot see its
+# siblings, so uniqueness has to be decided somewhere that can.
+[[durable_objects.bindings]]
+name = "Registry"
+class_name = "Registry"
+
+# SQLite-backed storage: the current default for new namespaces, and the only
+# backend available on the free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Registry"]
+
+[vars]
+# Comma-separated origins allowed to open a socket. Leave unset for local
+# development, where the Vite dev server's port moves around. Set it in
+# production to exactly the frontend's origin:
+#
+#   npx wrangler secret put ALLOWED_ORIGINS   # or set it here and redeploy
+#
+# ALLOWED_ORIGINS = "https://meowdoku.vercel.app"

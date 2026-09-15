@@ -1,0 +1,37 @@
+{
+  // Standalone, like party/tsconfig.json, and for the same reason: these tests
+  // run in Node against a live server, so they need node types and the DOM's
+  // WebSocket, neither of which the app project wants. Reference it from the
+  // root tsconfig to have `pnpm typecheck` cover them, or check them directly:
+  //
+  //   pnpm exec tsc --noEmit -p tests/integration/tsconfig.json
+  //
+  // Mirrors the app's strictness so code moving between the two does not relax.
+  "compilerOptions": {
+    "target": "ES2023",
+    // DOM for WebSocket, MessageEvent and CloseEvent — @types/node declares
+    // none of them globally. Node for `process`.
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "vitest/globals"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  // Only the tests. Everything they reach into — the wire format, the room-code
+  // rules, the level generator — comes in by import, which keeps the browser-only
+  // parts of src/multiplayer (the socket client, the store) out of a project that
+  // has no Vite types.
+  "include": ["**/*.ts"]
+}

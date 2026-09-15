@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LevelsRouteImport } from './routes/levels'
+import { Route as MultiplayerRouteImport } from './routes/multiplayer'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PlayLevelNumberRouteImport } from './routes/play.$levelNumber'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const LevelsRoute = LevelsRouteImport.update({
   id: '/levels',
   path: '/levels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MultiplayerRoute = MultiplayerRouteImport.update({
+  id: '/multiplayer',
+  path: '/multiplayer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -38,12 +44,14 @@ const PlayLevelNumberRoute = PlayLevelNumberRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/levels': typeof LevelsRoute
+  '/multiplayer': typeof MultiplayerRoute
   '/settings': typeof SettingsRoute
   '/play/$levelNumber': typeof PlayLevelNumberRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/levels': typeof LevelsRoute
+  '/multiplayer': typeof MultiplayerRoute
   '/settings': typeof SettingsRoute
   '/play/$levelNumber': typeof PlayLevelNumberRoute
 }
@@ -51,20 +59,29 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/levels': typeof LevelsRoute
+  '/multiplayer': typeof MultiplayerRoute
   '/settings': typeof SettingsRoute
   '/play/$levelNumber': typeof PlayLevelNumberRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/levels' | '/settings' | '/play/$levelNumber'
+  fullPaths:
+    '/' | '/levels' | '/multiplayer' | '/settings' | '/play/$levelNumber'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/levels' | '/settings' | '/play/$levelNumber'
-  id: '__root__' | '/' | '/levels' | '/settings' | '/play/$levelNumber'
+  to: '/' | '/levels' | '/multiplayer' | '/settings' | '/play/$levelNumber'
+  id:
+    | '__root__'
+    | '/'
+    | '/levels'
+    | '/multiplayer'
+    | '/settings'
+    | '/play/$levelNumber'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LevelsRoute: typeof LevelsRoute
+  MultiplayerRoute: typeof MultiplayerRoute
   SettingsRoute: typeof SettingsRoute
   PlayLevelNumberRoute: typeof PlayLevelNumberRoute
 }
@@ -83,6 +100,13 @@ declare module '@tanstack/react-router' {
       path: '/levels'
       fullPath: '/levels'
       preLoaderRoute: typeof LevelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/multiplayer': {
+      id: '/multiplayer'
+      path: '/multiplayer'
+      fullPath: '/multiplayer'
+      preLoaderRoute: typeof MultiplayerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -105,6 +129,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LevelsRoute: LevelsRoute,
+  MultiplayerRoute: MultiplayerRoute,
   SettingsRoute: SettingsRoute,
   PlayLevelNumberRoute: PlayLevelNumberRoute,
 }

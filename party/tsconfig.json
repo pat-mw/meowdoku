@@ -1,0 +1,49 @@
+{
+  // The party server is built by wrangler rather than vite, and nothing in src/
+  // imports it — but it is referenced by the root project so that `pnpm typecheck`
+  // covers the Worker as well as the app, against Worker types rather than DOM ones.
+  // Mirrors the app's strictness so code moving between the two does not relax.
+  "compilerOptions": {
+    "target": "ES2022",
+    // WebWorker sits alongside the Cloudflare types because the Workers types
+    // declare globals such as `crypto` with `const`, which leaves them off
+    // `typeof globalThis` — and src/multiplayer/roomCode.ts reaches for
+    // `globalThis.crypto` to seed a room code. WebWorker declares the same
+    // globals with `var`, which is what puts them on `globalThis`.
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.party.tsbuildinfo"
+  },
+  /*
+   * The worker's own code, plus exactly the modules it shares with the app: the
+   * wire protocol, the match rules and the room-code helpers. Sharing those
+   * files rather than restating them is what stops the server and the client
+   * disagreeing about who won — and listing them here means they are typechecked
+   * a second time against Worker types, which is how we know the shared code is
+   * genuinely free of DOM assumptions. The client, store and connection modules
+   * are deliberately absent: they are browser code and belong only to the app.
+   */
+  "include": [
+    "**/*.ts",
+    "../src/multiplayer/protocol.ts",
+    "../src/multiplayer/match.ts",
+    "../src/multiplayer/roomCode.ts",
+    "../src/board/**/*.ts"
+  ]
+}

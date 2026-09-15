@@ -8,3 +8,11 @@ coverage
 playwright-report
 test-results
 .eslintcache
+
+# Party server: wrangler's local workerd state and build output, and the
+# bindings file `wrangler types` regenerates from wrangler.toml.
+.wrangler
+party/worker-configuration.d.ts
+
+# Local Cloudflare Workers dev state
+.wrangler
