@@ -16,6 +16,14 @@
       name="description"
       content="A cosy logic puzzle. One cat per colour, row and column — and cats can never touch."
     />
+    <!--
+      Three tags on purpose. The media-scoped pair means the browser chrome
+      matches the device's colour scheme from the very first paint, before any
+      script has run; the unconditional one is what the app retargets once it
+      knows the player's explicit choice.
+    -->
+    <meta name="theme-color" content="#F5F0EB" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1A1614" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F5F0EB" />
     <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />

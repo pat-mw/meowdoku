@@ -104,6 +104,12 @@ export function SettingsPanel({
             checked: settings.autoX,
             onChange: () => toggleSetting('autoX'),
           },
+          {
+            key: 'darkMode',
+            label: 'Dark mode',
+            checked: settings.darkMode,
+            onChange: () => toggleSetting('darkMode'),
+          },
         ]}
         danger={dangerAction}
         storageLabel={STORAGE_LABELS[storage]}

@@ -9,10 +9,12 @@ import { loadLevel, prefetchLevels } from '../level/levelClient'
 import { HAPTICS, hapticForGesture, vibrate } from '../fx/haptics'
 import { playSound, type SoundKind } from '../fx/sound'
 import { requestPersistentStorage, type StoragePersistence } from '../pwa/storage'
+import { applyTheme, systemTheme } from '../ui/theme'
 import {
   type CompletedLevel,
   type SaveFile,
   type Settings,
+  DEFAULT_SETTINGS,
   computeLifetimeScore,
   freshSave,
 } from './save'
@@ -133,7 +135,13 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     boot: async () => {
       const loaded = await loadSave(now())
-      const save = loaded ?? freshSave(now())
+      // A fresh install follows the device's colour scheme; a returning player
+      // gets whatever they last chose, even if the device has since changed.
+      const save = loaded ?? {
+        ...freshSave(now()),
+        settings: { ...DEFAULT_SETTINGS, darkMode: systemTheme() === 'dark' },
+      }
+      applyTheme(save.settings.darkMode ? 'dark' : 'light')
       set({ save, ready: true })
       // Asking early means the grant is in place before the player has anything
       // worth losing.
@@ -210,6 +218,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Chrome demands, and its result is what the settings panel's diagnostic
       // line reports. The `persist` below re-renders the panel afterwards, so
       // that line is always reading the outcome of this call.
+      if (key === 'darkMode') applyTheme(settings.darkMode ? 'dark' : 'light')
       if (key === 'haptics' && settings.haptics) vibrate(HAPTICS.confirm, true)
       if (key === 'sound' && settings.sound) playSound('pop', true)
       if (key === 'autoX' && state.game) {
@@ -220,6 +229,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     applyImportedSave: async (save) => {
       const next: SaveFile = { ...save, savedAt: now() }
+      applyTheme(next.settings.darkMode ? 'dark' : 'light')
       set({ save: next, game: null, level: null })
       saver.schedule(next)
       saver.flush()
@@ -228,7 +238,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     resetProgress: async () => {
       await clearSave()
       clearLevelMemoryCache()
-      const save = freshSave(now())
+      // Reset returns the theme to the device's preference too, since the
+      // player's explicit choice is part of what is being cleared.
+      const save = {
+        ...freshSave(now()),
+        settings: { ...DEFAULT_SETTINGS, darkMode: systemTheme() === 'dark' },
+      }
+      applyTheme(save.settings.darkMode ? 'dark' : 'light')
       set({ save, game: null, level: null, loadError: null })
       saver.schedule(save)
       saver.flush()

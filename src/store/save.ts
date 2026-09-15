@@ -16,6 +16,13 @@ export type Settings = {
   haptics: boolean
   colorBlind: boolean
   autoX: boolean
+  /**
+   * Whether to use the dark theme. A fresh install takes its starting value
+   * from the device's own colour-scheme preference rather than this default, so
+   * a player whose phone is dark is not handed a cream screen at midnight; from
+   * the first time they touch the toggle it is theirs.
+   */
+  darkMode: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   colorBlind: false,
   autoX: false,
+  darkMode: false,
 }
 
 export type CompletedLevel = {
@@ -141,6 +149,7 @@ export const parseSave = (raw: unknown, now: number): SaveFile | null => {
       haptics: bool(settings.haptics, DEFAULT_SETTINGS.haptics),
       colorBlind: bool(settings.colorBlind, DEFAULT_SETTINGS.colorBlind),
       autoX: bool(settings.autoX, DEFAULT_SETTINGS.autoX),
+      darkMode: bool(settings.darkMode, DEFAULT_SETTINGS.darkMode),
     },
     lifetimeScore: Math.max(
       0,

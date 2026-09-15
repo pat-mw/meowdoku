@@ -28,33 +28,33 @@ export function CatFace({
     >
       <polygon
         points="10,28 14,6 30,16"
-        fill="var(--mdk-cat-body)"
-        stroke="var(--mdk-cat-body)"
+        fill="var(--mdk-cat-ink)"
+        stroke="var(--mdk-cat-ink)"
         strokeWidth="6"
         strokeLinejoin="round"
       />
       <polygon
         points="54,28 50,6 34,16"
-        fill="var(--mdk-cat-body)"
-        stroke="var(--mdk-cat-body)"
+        fill="var(--mdk-cat-ink)"
+        stroke="var(--mdk-cat-ink)"
         strokeWidth="6"
         strokeLinejoin="round"
       />
-      <ellipse cx="32" cy="38" rx="25" ry="22" fill="var(--mdk-cat-body)" />
+      <ellipse cx="32" cy="38" rx="25" ry="22" fill="var(--mdk-cat-ink)" />
       {expression === 'calm' ? (
         <>
           <ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF" />
           <circle cx="21" cy="34" r="5" fill="#FFFFFF" />
           <circle cx="43" cy="34" r="5" fill="#FFFFFF" />
-          <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
-          <circle cx="42" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
+          <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-ink)" />
+          <circle cx="42" cy="35" r="2.4" fill="var(--mdk-cat-ink)" />
           <polygon points="32,43 28,39 36,39" fill="var(--mdk-cat-nose)" />
         </>
       ) : expression === 'wink' ? (
         <>
           <ellipse cx="32" cy="47" rx="16" ry="11" fill="#FFFFFF" />
           <circle cx="21" cy="34" r="5" fill="#FFFFFF" />
-          <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
+          <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-ink)" />
           <path
             d="M37 33 Q42 29 47 33"
             stroke="#FFFFFF"
@@ -93,28 +93,28 @@ export function CatLogo({ className, style }: IconProps) {
     >
       <polygon
         points="10,28 14,6 30,16"
-        fill="var(--mdk-cat-body)"
-        stroke="var(--mdk-cat-body)"
+        fill="var(--mdk-cat-ink)"
+        stroke="var(--mdk-cat-ink)"
         strokeWidth="6"
         strokeLinejoin="round"
       />
       <polygon
         points="54,28 50,6 34,16"
-        fill="var(--mdk-cat-body)"
-        stroke="var(--mdk-cat-body)"
+        fill="var(--mdk-cat-ink)"
+        stroke="var(--mdk-cat-ink)"
         strokeWidth="6"
         strokeLinejoin="round"
       />
-      <ellipse cx="32" cy="38" rx="25" ry="22" fill="var(--mdk-cat-body)" />
+      <ellipse cx="32" cy="38" rx="25" ry="22" fill="var(--mdk-cat-ink)" />
       <ellipse cx="32" cy="46" rx="16" ry="12" fill="#FFFFFF" />
       <circle cx="21" cy="34" r="5" fill="#FFFFFF" />
       <circle cx="43" cy="34" r="5" fill="#FFFFFF" />
-      <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
-      <circle cx="42" cy="35" r="2.4" fill="var(--mdk-cat-body)" />
+      <circle cx="22" cy="35" r="2.4" fill="var(--mdk-cat-ink)" />
+      <circle cx="42" cy="35" r="2.4" fill="var(--mdk-cat-ink)" />
       <polygon points="32,43 28,39 36,39" fill="var(--mdk-cat-nose)" />
       <path
         d="M32 43 Q29 48 25 46 M32 43 Q35 48 39 46"
-        stroke="var(--mdk-cat-body)"
+        stroke="var(--mdk-cat-ink)"
         strokeWidth="2"
         fill="none"
         strokeLinecap="round"
@@ -127,7 +127,7 @@ export function CatLogo({ className, style }: IconProps) {
 export function CatPip({
   className,
   style,
-  fill = 'var(--mdk-cat-body)',
+  fill = 'var(--mdk-cat-ink)',
 }: IconProps & { fill?: string }) {
   return (
     <svg

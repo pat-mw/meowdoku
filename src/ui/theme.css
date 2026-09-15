@@ -1,0 +1,150 @@
+/**
+ * Dark theme.
+ *
+ * Only the surfaces and the ink change. The seventeen region colours stay
+ * exactly as they are, because they are the puzzle's content rather than its
+ * chrome: a player learns "the teal region" and it has to be the same teal in
+ * either theme, and the pastels are already the brightest thing on a cream
+ * background, so on a dark one they simply become the focus.
+ *
+ * The dark values live in one block of `--mdk-dark-*` properties and are
+ * assigned from two places — the system preference, and an explicit choice in
+ * Settings. Keeping the values themselves in a single place is what stops the
+ * two paths drifting apart.
+ *
+ * Specificity does the arbitration. `:root[data-theme]` is an attribute
+ * selector and outranks the bare `:root` that the media query uses, so an
+ * explicit choice always beats the system preference, in both directions,
+ * without needing `!important` or a light-mode reset block.
+ */
+
+:root {
+  /**
+   * The cat as drawn on the app's own surfaces — pills, buttons, overlays, the
+   * home-screen logo. Cells override it back to the true colour below, because
+   * a cell keeps its pastel background in either theme.
+   */
+  --mdk-cat-ink: var(--mdk-cat-body);
+
+  /* Warm rather than neutral: the light theme is cream and dusky brown, so the
+     dark one is a dark brown, not a grey. Pure black would read as a different
+     product. */
+  --mdk-dark-bg: #1a1614;
+  --mdk-dark-card: #2a2320;
+  --mdk-dark-card-locked: #231d1a;
+  --mdk-dark-scrim: rgba(0, 0, 0, 0.62);
+
+  --mdk-dark-ink: #e6b8ae;
+  --mdk-dark-ink-strong: #f2e6de;
+  --mdk-dark-ink-muted: #b2948a;
+  --mdk-dark-ink-faint: #6d5a51;
+  --mdk-dark-ink-locked: #574840;
+  --mdk-dark-ink-pictogram: #e8dcd2;
+
+  /* The accents keep their hue but lift slightly, because the same saturation
+     reads dimmer against a dark surface than against cream. The coral of a
+     wrong guess is deliberately absent: it is drawn on a region colour, which
+     does not change, so neither should it. */
+  --mdk-dark-gold: #f0c855;
+  --mdk-dark-green: #62b473;
+  --mdk-dark-danger-bg: #3b2320;
+  --mdk-dark-danger-ink: #f39174;
+  --mdk-dark-toggle-off: #4b3e37;
+
+  --mdk-dark-pict-tan: #4a3d33;
+  --mdk-dark-pict-brown: #c7a68d;
+
+  /* The cat is a near-black tuxedo, which disappears into a dark card. On the
+     chrome it becomes a warm grey-brown: light enough to show a silhouette,
+     dark enough that the white muzzle and eyes still read as white, so it is
+     still recognisably the same cat rather than a negative of it. */
+  --mdk-dark-cat-ink: #6e5f57;
+
+  /* A shadow on a dark surface has to be darker to register at all, and the
+     primary button's coloured glow is dropped for a plain one. */
+  --mdk-dark-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --mdk-dark-shadow-button: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --mdk-dark-shadow-primary: 0 6px 20px rgba(0, 0, 0, 0.55);
+  --mdk-dark-shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.65);
+  --mdk-dark-shadow-toast: 0 8px 28px rgba(0, 0, 0, 0.55);
+  --mdk-dark-shadow-logo: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --mdk-cat-ink: var(--mdk-dark-cat-ink);
+
+    --mdk-bg: var(--mdk-dark-bg);
+    --mdk-card: var(--mdk-dark-card);
+    --mdk-card-locked: var(--mdk-dark-card-locked);
+    --mdk-scrim: var(--mdk-dark-scrim);
+
+    --mdk-ink: var(--mdk-dark-ink);
+    --mdk-ink-strong: var(--mdk-dark-ink-strong);
+    --mdk-ink-muted: var(--mdk-dark-ink-muted);
+    --mdk-ink-faint: var(--mdk-dark-ink-faint);
+    --mdk-ink-locked: var(--mdk-dark-ink-locked);
+    --mdk-ink-pictogram: var(--mdk-dark-ink-pictogram);
+
+    --mdk-gold: var(--mdk-dark-gold);
+    --mdk-green: var(--mdk-dark-green);
+    --mdk-danger-bg: var(--mdk-dark-danger-bg);
+    --mdk-danger-ink: var(--mdk-dark-danger-ink);
+    --mdk-toggle-off: var(--mdk-dark-toggle-off);
+
+    --mdk-pict-tan: var(--mdk-dark-pict-tan);
+    --mdk-pict-brown: var(--mdk-dark-pict-brown);
+
+    --mdk-shadow-card: var(--mdk-dark-shadow-card);
+    --mdk-shadow-button: var(--mdk-dark-shadow-button);
+    --mdk-shadow-primary: var(--mdk-dark-shadow-primary);
+    --mdk-shadow-overlay: var(--mdk-dark-shadow-overlay);
+    --mdk-shadow-toast: var(--mdk-dark-shadow-toast);
+    --mdk-shadow-logo: var(--mdk-dark-shadow-logo);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --mdk-cat-ink: var(--mdk-dark-cat-ink);
+
+  --mdk-bg: var(--mdk-dark-bg);
+  --mdk-card: var(--mdk-dark-card);
+  --mdk-card-locked: var(--mdk-dark-card-locked);
+  --mdk-scrim: var(--mdk-dark-scrim);
+
+  --mdk-ink: var(--mdk-dark-ink);
+  --mdk-ink-strong: var(--mdk-dark-ink-strong);
+  --mdk-ink-muted: var(--mdk-dark-ink-muted);
+  --mdk-ink-faint: var(--mdk-dark-ink-faint);
+  --mdk-ink-locked: var(--mdk-dark-ink-locked);
+  --mdk-ink-pictogram: var(--mdk-dark-ink-pictogram);
+
+  --mdk-gold: var(--mdk-dark-gold);
+  --mdk-green: var(--mdk-dark-green);
+  --mdk-danger-bg: var(--mdk-dark-danger-bg);
+  --mdk-danger-ink: var(--mdk-dark-danger-ink);
+  --mdk-toggle-off: var(--mdk-dark-toggle-off);
+
+  --mdk-pict-tan: var(--mdk-dark-pict-tan);
+  --mdk-pict-brown: var(--mdk-dark-pict-brown);
+
+  --mdk-shadow-card: var(--mdk-dark-shadow-card);
+  --mdk-shadow-button: var(--mdk-dark-shadow-button);
+  --mdk-shadow-primary: var(--mdk-dark-shadow-primary);
+  --mdk-shadow-overlay: var(--mdk-dark-shadow-overlay);
+  --mdk-shadow-toast: var(--mdk-dark-shadow-toast);
+  --mdk-shadow-logo: var(--mdk-dark-shadow-logo);
+}
+
+/**
+ * A board cell keeps its region colour in either theme, so anything drawn on one
+ * keeps its original colours too: the near-black cat, the white cross, the coral
+ * of a wrong guess and the colour-blind letter are all unchanged by the theme.
+ */
+[role='gridcell'] {
+  --mdk-cat-ink: var(--mdk-cat-body);
+}

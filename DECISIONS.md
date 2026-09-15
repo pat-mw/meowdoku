@@ -255,3 +255,67 @@ an accepted call silently — `navigator.vibrate` returns `true` whenever Chrome
 hands the pattern to Android, regardless of what Android then does with it. So
 Settings reports which of those worlds the device is in rather than a bare
 on/off.
+
+## The region palette
+
+The seventeen region colours were measured pairwise in CIEDE2000 and
+re-measured under simulated protanopia and deuteranopia. The worst pair in
+typical colour vision was orange against peach at 7.43 — close enough that
+adjacent regions of those two read as one shape. Under deuteranopia light green
+against peach was 2.17, which is effectively the same colour.
+
+The palette now floors at 11.53 for typical vision, 4.66 under deuteranopia and
+4.43 under protanopia. Separation came from lightness and hue alone: no colour
+gained chroma over its previous value, because turning the saturation up would
+have solved the measurement and lost the design. Olive dropped out of the
+gold/yellow/light-green cluster, jade turned blue-green away from the other two
+greens, peach lightened away from orange, and teal darkened away from mint.
+Every name still describes its colour, so `REGION_NAMES` and `REGION_KEYS` are
+unchanged and neither the generator nor the hint engine is affected.
+
+`MIN_REGION_SEPARATION` is 11 because a CIEDE2000 distance of about 1 is the
+just-noticeable difference for a large patch; eleven is roughly ten times that
+and is the highest floor all seventeen can clear while staying one soft warm
+family. The dichromat floor of 4 records what is actually achievable rather than
+what would be desirable: dichromatic vision is two-dimensional, so seventeen
+categories cannot all be separated at a glance no matter how they are chosen.
+Eight pairs remain below 8 under deuteranopia and seven under protanopia, and
+the colour-blind letter overlay — not the palette — is the real accommodation.
+
+One weakness is unchanged rather than fixed: the white cross on the palest
+region has a contrast ratio of 1.34, and raising it would mean darkening the
+pale end enough to undo the separation gains. It is the weakest overlay in the
+design and it is no worse than it was.
+
+Adjacency-aware key assignment — refusing to give perceptually close keys to
+neighbouring regions rather than only refusing identical ones — was considered
+and rejected. For typical vision it is no longer needed; for dichromats it is
+the only remaining lever, but it would cost a generator version bump, constrain
+the colouring stage at 15x15 where fifteen of seventeen keys are already in
+play, and duplicate what the letter overlay already does.
+
+## Dark mode
+
+Only the surfaces and the ink change. The region colours stay exactly as they
+are, because they are the puzzle's content rather than its chrome: a player
+learns "the teal region" and it must be the same teal in either theme.
+
+The dark values live in one block of custom properties and are applied from two
+selectors — a `prefers-color-scheme` media query and a `data-theme` attribute —
+because a media query cannot be reused as an attribute selector. Specificity
+arbitrates: the attribute selector outranks the bare `:root` the media query
+uses, so an explicit choice beats the system preference in both directions
+without needing `!important`. A unit test asserts the two paths assign the same
+properties to the same values, since nothing else would stop them drifting.
+
+There is no inline bootstrap script to prevent a flash of the wrong theme,
+because the Content-Security-Policy forbids inline scripts. The media query
+covers the common case instead — a player whose phone is dark sees dark from the
+first paint — and only someone who has explicitly chosen the theme their device
+does not use can see a brief flash.
+
+The one thing that could not simply inherit is the cat. It is a near-black
+tuxedo, which vanishes into a dark card, so on the app's own surfaces it becomes
+a warm grey-brown: light enough to show a silhouette, dark enough that the white
+muzzle and eyes still read as white. A board cell keeps its pastel background in
+either theme, so cells scope the cat back to its true colour.

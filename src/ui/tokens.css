@@ -55,24 +55,29 @@
   /* Type */
   --mdk-font: 'Nunito', ui-rounded, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Region palette — 17 keys, so a 15x15 board always has two spares. */
-  --mdk-region-O: #f2a66e;
-  --mdk-region-G: #4e9a5f;
-  --mdk-region-Y: #d3b23b;
-  --mdk-region-B: #b8d2ee;
-  --mdk-region-T: #4fafb8;
-  --mdk-region-P: #efa6e4;
-  --mdk-region-L: #f2de8c;
-  --mdk-region-R: #9c6f49;
-  --mdk-region-M: #a6d98a;
-  --mdk-region-U: #8c7fe0;
-  --mdk-region-K: #cb6f98;
-  --mdk-region-V: #c9a8f0;
-  --mdk-region-N: #f6c08b;
-  --mdk-region-W: #7fa3d9;
-  --mdk-region-S: #b7bf55;
-  --mdk-region-C: #8fd8cf;
-  --mdk-region-F: #6fbf87;
+  /* Region palette — 17 keys, so a 15x15 board always has two spares.
+     These are duplicated in palette.ts for the consumers that cannot read a CSS
+     variable, and every pair is held at least 11 apart in CIEDE2000 so that two
+     regions meeting on the board are never a close call. tests/unit/palette.test.ts
+     re-measures the shipped values and fails on both counts, so edit the two
+     files together and read the threshold note in palette.ts first. */
+  --mdk-region-O: #efa46c;
+  --mdk-region-G: #599b5c;
+  --mdk-region-Y: #daab44;
+  --mdk-region-B: #b2d9f6;
+  --mdk-region-T: #40a1a6;
+  --mdk-region-P: #ee9acc;
+  --mdk-region-L: #eae193;
+  --mdk-region-R: #9a714a;
+  --mdk-region-M: #a5d484;
+  --mdk-region-U: #8974d2;
+  --mdk-region-K: #cc6b8f;
+  --mdk-region-V: #d5b6f9;
+  --mdk-region-N: #f9c2ab;
+  --mdk-region-W: #76a1d7;
+  --mdk-region-S: #8c9c41;
+  --mdk-region-C: #94dace;
+  --mdk-region-F: #5bb897;
 }
 
 @keyframes mdkPop {
