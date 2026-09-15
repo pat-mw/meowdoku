@@ -41,13 +41,16 @@ export type HintKind =
 
 export type Hint = {
   kind: HintKind
-  /** Cells this step proves cannot hold a cat, and marks. Never empty. */
-  cells: CellIndex[]
   /**
-   * Cells the same rule also settles but that the hint left alone, because
-   * marking them all would have handed the player the board.
+   * Every cell this rule settles, all of which the hint marks.
+   *
+   * A hint always does exactly what it says. An earlier version trimmed a large
+   * deduction to a fixed budget and reported the remainder as "3 more follow",
+   * which read as a bug: the explanation named a rule, and cells plainly
+   * covered by that rule sat there unmarked. Size is now steered by which rule
+   * gets offered, never by marking part of one.
    */
-  more: number
+  cells: CellIndex[]
   /** The rule, in one short phrase, for the toast headline. */
   title: string
   /** Why it applies here, naming the rows, columns and colours involved. */
@@ -66,17 +69,32 @@ const MAX_LOCKED_SET = 4
 const MAX_STEPS = 4096
 
 /**
- * The most cells one hint will mark.
+ * The most of the player's remaining work one hint should do, as a share of the
+ * cells they have left, and the floor below which that share is ignored.
  *
- * Some rules are enormously productive — a line served by a single colour can
- * rule out every other cell of that colour, and on a board with one very large
- * region that is eighty-odd cells, a third of the grid from one tap. The
- * deduction is sound, but handing it over wholesale does not help a player, it
- * finishes their puzzle for them. So a hint marks at most this many and says how
- * many more follow the same way, and the engine prefers a rule that fits inside
- * the budget over one that has to be trimmed.
+ * This steers which rule gets offered; it never truncates one. Almost every
+ * deduction is welcome however big — settling fifteen cells at once is the best
+ * kind of hint. The guard exists for one pathological case: a line served by a
+ * single colour rules out every other cell of that colour, which on a board with
+ * one very large region measured at eighty-four cells, a third of the grid from
+ * one tap. That does not help a player, it finishes their puzzle.
+ *
+ * So a rule is held back only when it would settle more than a quarter of what
+ * is left, and even then only if some other rule can be offered instead; if
+ * nothing else applies it is given in full. The floor keeps small boards and
+ * nearly-finished ones from rationing hints down to a single cell.
  */
-const MAX_CELLS_PER_HINT = 12
+const MAX_SHARE_OF_REMAINING = 0.25
+const ALWAYS_ALLOWED_CELLS = 12
+
+/** How large a deduction may be before the engine looks for a smaller one. */
+const idealLimit = (state: GameState): number => {
+  let remaining = 0
+  for (const cell of state.cells) {
+    if (cell === CellState.Empty) remaining++
+  }
+  return Math.max(ALWAYS_ALLOWED_CELLS, Math.floor(remaining * MAX_SHARE_OF_REMAINING))
+}
 
 type Grid = {
   size: number
@@ -94,7 +112,7 @@ type Grid = {
  * A deduction the engine made, before it is filtered down to what is new to the
  * player and trimmed to the size budget.
  */
-type Step = Omit<Hint, 'cells' | 'more'> & { cells: CellIndex[] }
+type Step = Omit<Hint, 'cells'> & { cells: CellIndex[] }
 
 const ordinalRow = (row: number): string => `row ${row + 1}`
 const ordinalColumn = (col: number): string => `column ${col + 1}`
@@ -549,26 +567,29 @@ const TECHNIQUES: ReadonlyArray<(grid: Grid) => Step[]> = [
  * so a player far ahead of the hints is carried forward to wherever they
  * actually are, rather than being told something they worked out ten moves ago.
  */
-/**
- * Ranks the candidate steps of one rule.
- *
- * A hint that settles eight cells teaches more than one that settles two, so
- * bigger is better — but only up to the budget, and past it bigger is worse,
- * because an oversized step has to be trimmed and a trimmed step leaves the
- * player a list of cells to finish by hand.
- */
-const valueOf = (freshCount: number): number => Math.min(freshCount, MAX_CELLS_PER_HINT)
+/** A rule's deduction, paired with what it would actually settle right now. */
+type Candidate = { step: Step; settles: CellIndex[]; fresh: CellIndex[] }
 
 export const findHint = (state: GameState): Hint | null => {
   const grid = buildGrid(state)
+  const limit = idealLimit(state)
+
+  const offer = (candidate: Candidate): Hint => {
+    for (const index of candidate.settles) grid.status[index] = RULED_OUT
+    return { ...candidate.step, cells: candidate.fresh }
+  }
 
   for (let guard = 0; guard < MAX_STEPS; guard++) {
-    let applied = false
+    // The tidiest rule found so far that settles more than the ideal. Held back
+    // in case a deeper rule offers something better sized, and used in full if
+    // none does.
+    let oversized: Candidate | null = null
+    let absorbed = false
 
     for (const technique of TECHNIQUES) {
       // Steps are computed against the grid as it was when the rule ran, so each
       // is re-checked for whether it still settles anything.
-      const live = technique(grid)
+      const live: Candidate[] = technique(grid)
         .map((step) => {
           const settles = step.cells.filter((index) => grid.status[index] === UNKNOWN)
           return {
@@ -581,33 +602,36 @@ export const findHint = (state: GameState): Hint | null => {
       if (live.length === 0) continue
 
       const offerable = live.filter((entry) => entry.fresh.length > 0)
-      if (offerable.length > 0) {
-        const best = offerable.reduce((winner, entry) => {
-          const byValue = valueOf(entry.fresh.length) - valueOf(winner.fresh.length)
-          if (byValue !== 0) return byValue > 0 ? entry : winner
-          // Equal value means both fill the budget; take the tidier one, which
-          // is the one that needs no trimming.
-          return entry.fresh.length < winner.fresh.length ? entry : winner
-        })
-        for (const index of best.settles) grid.status[index] = RULED_OUT
-        return {
-          ...best.step,
-          cells: best.fresh.slice(0, MAX_CELLS_PER_HINT),
-          more: Math.max(0, best.fresh.length - MAX_CELLS_PER_HINT),
+      if (offerable.length === 0) {
+        // This rule only re-proves what the player already knows. Absorb it and
+        // start again from the simplest rule, so they are never given a clever
+        // reason where a plain one has since become available.
+        for (const entry of live) {
+          for (const index of entry.settles) grid.status[index] = RULED_OUT
         }
+        absorbed = true
+        break
       }
 
-      // This rule only re-proves things the player already knows. Apply it all
-      // and start again from the simplest rule, so the player is never given a
-      // clever reason where a plain one has since become available.
-      for (const entry of live) {
-        for (const index of entry.settles) grid.status[index] = RULED_OUT
+      const wellSized = offerable.filter((entry) => entry.fresh.length <= limit)
+      if (wellSized.length > 0) {
+        // The biggest deduction that still fits: it teaches the most without
+        // running away with the board.
+        return offer(
+          wellSized.reduce((winner, entry) =>
+            entry.fresh.length > winner.fresh.length ? entry : winner,
+          ),
+        )
       }
-      applied = true
-      break
+
+      const smallest = offerable.reduce((winner, entry) =>
+        entry.fresh.length < winner.fresh.length ? entry : winner,
+      )
+      if (!oversized || smallest.fresh.length < oversized.fresh.length) oversized = smallest
     }
 
-    if (!applied) return null
+    if (oversized) return offer(oversized)
+    if (!absorbed) return null
   }
   return null
 }

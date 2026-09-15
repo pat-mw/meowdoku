@@ -53,8 +53,6 @@ export type GameState = {
   hintTitle: string | null
   /** The last hint's explanation, or null when no hint is showing. */
   hintMessage: string | null
-  /** Cells the last hint's rule also settles but deliberately left unmarked. */
-  hintMore: number
   /** Whether a correct cat auto-marks its row, column, region and neighbours. */
   autoX: boolean
   /** Final score, set when the level is won; 0 before that. */
@@ -75,7 +73,7 @@ export type GameAction =
   | { type: 'longPress'; index: CellIndex }
   | { type: 'paint'; indices: readonly CellIndex[]; mode: 'mark' | 'erase' }
   | { type: 'reveal' }
-  | { type: 'hint'; cells: readonly CellIndex[]; title: string; message: string; more?: number }
+  | { type: 'hint'; cells: readonly CellIndex[]; title: string; message: string }
   | { type: 'dismissHint' }
   | { type: 'settle' }
   | { type: 'setAutoX'; value: boolean }
@@ -117,7 +115,6 @@ export const createGame = (level: Level, options?: GameOptions): GameState => {
     hintCells: [],
     hintTitle: null,
     hintMessage: null,
-    hintMore: 0,
     autoX: options?.autoX ?? false,
     score: 0,
     stars: 0,
@@ -383,7 +380,6 @@ const hint = (
   indices: readonly CellIndex[],
   title: string,
   message: string,
-  more: number,
 ): GameState => {
   if (state.hintsLeft <= 0) return state
   // A rule that settles a whole group of cells marks the whole group: that is
@@ -398,7 +394,6 @@ const hint = (
     hintCells: settled,
     hintTitle: title,
     hintMessage: message,
-    hintMore: more,
   }
   if (settled.length > 0) {
     const cells = state.cells.slice()
@@ -452,12 +447,12 @@ export const reduce = (state: GameState, action: GameAction): GameState => {
     case 'reveal':
       return reveal(state)
     case 'hint':
-      return hint(state, action.cells, action.title, action.message, action.more ?? 0)
+      return hint(state, action.cells, action.title, action.message)
     case 'dismissHint': {
       if (state.hintCells.length === 0 && state.hintMessage === null) return state
       // Dismissing makes no sound, so no event is stamped and the UI has
       // nothing new to react to.
-      return { ...state, hintCells: [], hintTitle: null, hintMessage: null, hintMore: 0 }
+      return { ...state, hintCells: [], hintTitle: null, hintMessage: null }
     }
     case 'setAutoX': {
       if (state.autoX === action.value) return state

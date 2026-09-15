@@ -204,7 +204,6 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
           title={game.hintTitle}
           message={game.hintMessage}
           count={game.hintCells.length}
-          more={game.hintMore}
         />
       ) : null}
 

@@ -10,12 +10,10 @@ export function HintToast({
   title,
   message,
   count,
-  more,
 }: {
   title: string
   message: string
   count: number
-  more: number
 }) {
   return (
     <div
@@ -34,7 +32,6 @@ export function HintToast({
         <span className="text-[13px] font-black text-[var(--mdk-ink)]">{title}</span>
         <span className="flex-none text-[11px] font-extrabold text-[var(--mdk-ink-faint)]">
           {count === 1 ? '1 cell' : `${count} cells`} marked
-          {more > 0 ? ` · ${more} more follow` : ''}
         </span>
       </div>
       <p className="mt-1 text-[13px] font-bold leading-snug text-[var(--mdk-ink-strong)]">

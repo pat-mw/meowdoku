@@ -198,7 +198,6 @@ export const useGameStore = create<GameStore>((set, get) => {
         cells: hint.cells,
         title: hint.title,
         message: hint.message,
-        more: hint.more,
       })
     },
 

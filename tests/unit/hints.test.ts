@@ -250,6 +250,59 @@ describe('the rules a hint can invoke', () => {
   }, 60_000)
 })
 
+describe('a hint does exactly what it says', () => {
+  it('marks every cell its rule covers, however many that is', () => {
+    // A 15x15 board whose first region is two cells in column 1. That region's
+    // cat must therefore be in column 1, which rules out the other thirteen
+    // cells of the column — more than a hint would ideally mark. It must still
+    // mark all thirteen: an explanation that names a rule while leaving cells
+    // plainly covered by that rule unmarked reads as a bug, and was one.
+    const size = 15
+    const regions = Array.from({ length: size }, (_, row) =>
+      Array.from({ length: size }, (_, col) => (col === 0 && row < 2 ? 'A' : 'B')).join(''),
+    )
+    const level = levelFrom(
+      regions,
+      Array.from({ length: size }, (_, row) => row),
+    )
+
+    const hint = findHint(createGame(level))
+    expect(hint?.kind).toBe('region-fills-line')
+    expect(hint?.message).toMatch(/column 1/)
+    expect(hint?.cells).toHaveLength(13)
+    for (let row = 2; row < size; row++) {
+      expect(hint?.cells).toContain(toIndex(size, row, 0))
+    }
+  })
+
+  it('leaves nothing of its rule behind once applied', () => {
+    // Applying the hint and asking again must not produce the same rule over the
+    // same line: that would mean the first answer was only part of one.
+    const size = 15
+    const regions = Array.from({ length: size }, (_, row) =>
+      Array.from({ length: size }, (_, col) => (col === 0 && row < 2 ? 'A' : 'B')).join(''),
+    )
+    const level = levelFrom(
+      regions,
+      Array.from({ length: size }, (_, row) => row),
+    )
+
+    const first = findHint(createGame(level))
+    expect(first).not.toBeNull()
+    const after = reduce(
+      { ...createGame(level), hintsLeft: 9 },
+      {
+        type: 'hint',
+        cells: (first as Hint).cells,
+        title: (first as Hint).title,
+        message: (first as Hint).message,
+      },
+    )
+    const second = findHint({ ...after, hintsLeft: 9 })
+    if (second) expect(second.message).not.toBe((first as Hint).message)
+  })
+})
+
 describe('cost', () => {
   it('answers fast enough for a tap, even on the biggest board', () => {
     const level = generateLevel(1001)
