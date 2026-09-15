@@ -7,7 +7,7 @@ import { GENERATOR_VERSION } from '../board/generator/version'
 import { tierFor } from '../board/generator/tiers'
 import { loadLevel, prefetchLevels } from '../level/levelClient'
 import { HAPTICS, hapticForGesture, vibrate } from '../fx/haptics'
-import { playSound, type SoundKind } from '../fx/sound'
+import { playSound, setSoundEnabled, soundForGesture } from '../fx/sound'
 import { requestPersistentStorage, type StoragePersistence } from '../pwa/storage'
 import { applyTheme, systemTheme } from '../ui/theme'
 import {
@@ -32,18 +32,6 @@ import { clearLevelMemoryCache } from '../level/levelCache'
  */
 
 const saver = createSaveScheduler(100)
-
-/** Which cue each reducer event plays. */
-const EVENT_SOUND: Record<Exclude<GameState['event'], 'none'>, SoundKind> = {
-  tick: 'tick',
-  untick: 'untick',
-  mew: 'mew',
-  bonk: 'bonk',
-  pop: 'pop',
-  sparkle: 'sparkle',
-  win: 'win',
-  fail: 'fail',
-}
 
 export type GameStore = {
   ready: boolean
@@ -92,13 +80,14 @@ export const useGameStore = create<GameStore>((set, get) => {
    *
    * The action is needed as well as the event because several gestures share an
    * event stamp — a tap, a drag and a long press all produce `tick` or `untick`
-   * — while each of them has its own haptic.
+   * — while each of them has its own haptic and its own cue.
    */
   const announce = (action: GameAction, previous: GameState | null, next: GameState): void => {
     if (next.event === 'none') return
     if (previous && previous.eventSeq === next.eventSeq) return
     const { sound, haptics } = get().save.settings
-    playSound(EVENT_SOUND[next.event], sound)
+    const cue = soundForGesture(action, next.event)
+    if (cue !== null) playSound(cue, sound)
     const pattern = hapticForGesture(action, next.event)
     if (pattern !== null) vibrate(pattern, haptics)
   }
@@ -220,7 +209,13 @@ export const useGameStore = create<GameStore>((set, get) => {
       // that line is always reading the outcome of this call.
       if (key === 'darkMode') applyTheme(settings.darkMode ? 'dark' : 'light')
       if (key === 'haptics' && settings.haptics) vibrate(HAPTICS.confirm, true)
-      if (key === 'sound' && settings.sound) playSound('pop', true)
+      // Sound is told to the synthesiser as well as demonstrated, so switching
+      // it off stops cues that do not go through `announce` and lets the audio
+      // context be released rather than sitting idle.
+      if (key === 'sound') {
+        setSoundEnabled(settings.sound)
+        if (settings.sound) playSound('confirm', true)
+      }
       if (key === 'autoX' && state.game) {
         set({ game: reduce(state.game, { type: 'setAutoX', value: settings.autoX }) })
       }

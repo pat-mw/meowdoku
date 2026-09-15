@@ -345,3 +345,42 @@ One documented exception: gold stars on white sit at 1.84:1 and stay there.
 Darkening gold far enough to clear 3:1 turns it olive and stops it reading as
 gold, and the stars never carry information alone — a level tile's accessible
 name states the count and the win overlay prints the score beside them.
+
+## The sound engine is a vendored copy, deliberately
+
+The hand-rolled oscillator cues were replaced with cuelume's, which are richer
+and were the ones asked for. The library is a good fit for this app: it
+synthesises every cue live, so there are no audio files to fetch, nothing to
+precache, and nothing that a `script-src 'self'` policy would block.
+
+It is vendored into `src/fx/cuelume.ts` under its MIT licence rather than
+imported, for one reason. Upstream caches both its `AudioContext` and its shared
+output node at module scope and exports no way to drop either, which would have
+silently undone the Bluetooth fix: an `AudioContext` is bound to the output
+device that existed when it was created, and the only recovery when that device
+is swapped is to throw the context away.
+
+The evidence that it does not recover on its own is in this repository's own
+history. The pre-fix `src/fx/sound.ts` was functionally identical to cuelume's
+`play()` — one lazily-created shared context, resumed whenever it was not
+running — and that is exactly the code the bug was reported against. A context
+playing to a device that has gone still reports itself as `running`, so the
+resume branch never runs. Rebuilding the context from outside the library would
+be worse than useless: the cached output node belongs to the context that made
+it, and connecting a node to one from a different context throws
+`InvalidAccessError`, so every later cue would fail loudly instead of quietly.
+`setSinkId` is not available on `AudioContext` in Safari, so re-pointing a live
+context is not an option either.
+
+The copy is upstream's code unchanged except for `releaseAudio`, which drops the
+context and the output node together. `cuelume` stays installed as a
+devDependency so the copy can be diffed against it, and a unit test compares the
+vendored recipes against the installed package and fails if a version bump ever
+drifts from them.
+
+Two tuning decisions worth keeping: a drag plays its cue at reduced volume and
+no more than once every 60 ms, because a stroke paints a cell per animation
+frame and the untreated cue rings for longer than the gap between them, turning
+a sequence of ticks into a buzz. And switching Sound off closes the audio
+context rather than merely muting it, because an idle context keeps the phone's
+audio path awake.
