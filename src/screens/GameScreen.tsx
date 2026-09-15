@@ -158,9 +158,11 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
         </Pill>
       </div>
 
-      {/* A 15x15 board needs every pixel of height it can get, so on large
-          boards the rules collapse behind a summary the player can reopen. */}
-      {large ? <CollapsedRules /> : <RulesStrip />}
+      {/* Small boards keep the rules between the pills and the grid, where the
+          approved layout puts them. A large board needs that height for the
+          grid itself, so the same strip moves below the toolbar instead — see
+          the copy rendered after the power-up buttons. */}
+      {large ? null : <RulesStrip />}
 
       {/* Keyed by size so a level of a different size gets a fresh transform
           rather than inheriting the last board's pan and zoom. */}
@@ -198,6 +200,11 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
           <Bulb className="h-[37px] w-[30px]" />
         </PowerButton>
       </div>
+
+      {/* The large-board home for the rules. Every board size gets the full
+          pictograms; only their position changes, because the space under the
+          toolbar is empty exactly when the space above the board is not. */}
+      {large ? <RulesStrip /> : null}
 
       {game.hintMessage && game.hintTitle ? (
         <HintToast
@@ -244,23 +251,6 @@ export function GameScreen({ levelNumber }: { levelNumber: number }) {
         />
       ) : null}
     </section>
-  )
-}
-
-/** The rules, folded away on boards where vertical space is scarce. */
-function CollapsedRules() {
-  return (
-    <details
-      className="rounded-[var(--mdk-radius-panel)] bg-[var(--mdk-card)] px-3 py-2"
-      style={{ boxShadow: 'var(--mdk-shadow-card)' }}
-    >
-      <summary className="cursor-pointer list-none text-[12px] font-extrabold text-[var(--mdk-ink)]">
-        One cat per colour, row and column · cats cannot touch
-      </summary>
-      <div className="pt-2.5">
-        <RulesStrip />
-      </div>
-    </details>
   )
 }
 

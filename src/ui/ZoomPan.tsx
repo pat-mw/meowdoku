@@ -145,5 +145,6 @@ export function ZoomPan({ enabled, children }: { enabled: boolean; children: Rea
   )
 }
 
-/** Boards this size or larger get the zoom layer and a collapsed rules strip. */
+/** Boards this size or larger get the zoom layer, and move the rules strip
+    below the toolbar so the grid keeps the height above it. */
 export const LARGE_BOARD_SIZE = 13

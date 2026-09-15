@@ -101,6 +101,44 @@ export const startFreshGame = async (page: Page): Promise<void> => {
   await page.getByRole('grid').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
+/**
+ * Wipes storage and writes a save that has unlocked everything up to `level`,
+ * so a deep link to a late level passes the route guard.
+ *
+ * Only the localStorage mirror is written: boot reads both stores and keeps the
+ * newer one, and nothing on the home screen writes a save, so the IndexedDB copy
+ * stays empty after the wipe and cannot outvote this one.
+ */
+export const seedUnlockedTo = async (page: Page, level: number): Promise<void> => {
+  await page.goto('/')
+  await page.evaluate(async (currentLevel) => {
+    try {
+      localStorage.clear()
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase('keyval-store')
+        request.onsuccess = () => resolve()
+        request.onerror = () => resolve()
+        request.onblocked = () => resolve()
+      })
+      localStorage.setItem(
+        'meowdoku:v1',
+        JSON.stringify({
+          schemaVersion: 1,
+          currentLevel,
+          completed: {},
+          inProgress: null,
+          settings: { sound: false, haptics: false, colorBlind: false, autoX: false },
+          lifetimeScore: 0,
+          savedAt: Date.now(),
+        }),
+      )
+    } catch {
+      // A browser that blocks storage leaves the level locked, and the deep link
+      // lands on the level list - which the assertions will report plainly.
+    }
+  }, level)
+}
+
 /** Places a correct cat using the reveal power-up, which is deterministic. */
 export const revealCat = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: /^Reveal a cat/ }).click()

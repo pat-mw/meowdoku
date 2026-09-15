@@ -52,9 +52,15 @@ export const RULE_PICTOGRAMS: RulePictogramSpec[] = [
   },
 ]
 
+/**
+ * The three rules, always shown in full. The strip carries an accessible name so
+ * a screen reader announces it as a landmark rather than three loose captions,
+ * and so layout tests can find it wherever on the screen it has been placed.
+ */
 export function RulesStrip() {
   return (
-    <div
+    <section
+      aria-label="How to play"
       className="flex gap-2.5 rounded-[var(--mdk-radius-panel)] bg-[var(--mdk-card)] px-3 py-2.5"
       style={{ boxShadow: 'var(--mdk-shadow-card)' }}
     >
@@ -86,7 +92,7 @@ export function RulesStrip() {
           <div className="text-[11px] font-extrabold leading-[1.25]">{rule.label}</div>
         </div>
       ))}
-    </div>
+    </section>
   )
 }
 
