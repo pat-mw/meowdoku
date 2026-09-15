@@ -3,7 +3,7 @@ import { useGameStore } from '../store/useGameStore'
 import { SettingsOverlay } from '../ui/overlays'
 import { exportSave, importSave } from '../store/transfer'
 import { APP_VERSION } from '../version'
-import { hapticsSupported } from '../fx/haptics'
+import { hapticsDiagnostic } from '../fx/haptics'
 
 const STORAGE_LABELS = {
   persistent: 'persistent',
@@ -71,6 +71,11 @@ export function SettingsPanel({
     })
   }
 
+  // Read during render rather than held in state: toggling haptics writes to
+  // the store, so the panel re-renders straight after the confirmation buzz and
+  // picks up whatever the browser said about that call.
+  const hapticsLabel = hapticsDiagnostic(settings.haptics)
+
   return (
     <>
       <SettingsOverlay
@@ -102,9 +107,7 @@ export function SettingsPanel({
         ]}
         danger={dangerAction}
         storageLabel={STORAGE_LABELS[storage]}
-        hapticsLabel={
-          hapticsSupported() ? (settings.haptics ? 'on' : 'off') : 'not supported by this browser'
-        }
+        hapticsLabel={hapticsLabel}
         version={APP_VERSION}
         onExport={onExport}
         onImport={onImport}

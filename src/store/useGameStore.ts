@@ -6,7 +6,7 @@ import { findHint } from '../board/hints'
 import { GENERATOR_VERSION } from '../board/generator/version'
 import { tierFor } from '../board/generator/tiers'
 import { loadLevel, prefetchLevels } from '../level/levelClient'
-import { HAPTICS, vibrate } from '../fx/haptics'
+import { HAPTICS, hapticForGesture, vibrate } from '../fx/haptics'
 import { playSound, type SoundKind } from '../fx/sound'
 import { requestPersistentStorage, type StoragePersistence } from '../pwa/storage'
 import {
@@ -41,15 +41,6 @@ const EVENT_SOUND: Record<Exclude<GameState['event'], 'none'>, SoundKind> = {
   sparkle: 'sparkle',
   win: 'win',
   fail: 'fail',
-}
-
-const EVENT_HAPTIC: Partial<Record<GameState['event'], number | number[]>> = {
-  tick: HAPTICS.tick,
-  untick: HAPTICS.clear,
-  pop: HAPTICS.hint,
-  mew: HAPTICS.cat,
-  sparkle: HAPTICS.cat,
-  bonk: HAPTICS.wrong,
 }
 
 export type GameStore = {
@@ -94,14 +85,20 @@ export const useGameStore = create<GameStore>((set, get) => {
     return next
   }
 
-  /** Turns the reducer's event stamp into sound and haptics, once per event. */
-  const announce = (previous: GameState | null, next: GameState): void => {
+  /**
+   * Turns the reducer's event stamp into sound and haptics, once per event.
+   *
+   * The action is needed as well as the event because several gestures share an
+   * event stamp — a tap, a drag and a long press all produce `tick` or `untick`
+   * — while each of them has its own haptic.
+   */
+  const announce = (action: GameAction, previous: GameState | null, next: GameState): void => {
     if (next.event === 'none') return
     if (previous && previous.eventSeq === next.eventSeq) return
     const { sound, haptics } = get().save.settings
     playSound(EVENT_SOUND[next.event], sound)
-    const pattern = EVENT_HAPTIC[next.event]
-    if (pattern !== undefined) vibrate(pattern, haptics)
+    const pattern = hapticForGesture(action, next.event)
+    if (pattern !== null) vibrate(pattern, haptics)
   }
 
   /** Records a completed level and unlocks the next one. */
@@ -183,7 +180,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const next = reduce(previous, action)
       if (next === previous) return
       set({ game: next })
-      announce(previous, next)
+      announce(action, previous, next)
       if (next.status === 'winning' && previous.status !== 'winning') recordWin(next)
       else persist()
     },
@@ -207,9 +204,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       const state = get()
       const settings = { ...state.save.settings, [key]: !state.save.settings[key] }
       set({ save: { ...state.save, settings } })
-      // Switching a feedback setting on demonstrates it immediately, which is
-      // both a nicety and the only way a player can tell whether their device
-      // supports haptics at all.
+      // Switching a feedback setting on demonstrates it immediately. For
+      // haptics it does double duty: the call runs inside the toggle's own
+      // event, so it is the one place guaranteed to have the user activation
+      // Chrome demands, and its result is what the settings panel's diagnostic
+      // line reports. The `persist` below re-renders the panel afterwards, so
+      // that line is always reading the outcome of this call.
       if (key === 'haptics' && settings.haptics) vibrate(HAPTICS.confirm, true)
       if (key === 'sound' && settings.sound) playSound('pop', true)
       if (key === 'autoX' && state.game) {

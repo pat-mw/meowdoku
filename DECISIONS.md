@@ -208,3 +208,50 @@ every other cell of that colour — measured at up to eighty-four cells, a third
 of a 15x15 grid from one tap. Sound, but it finishes the puzzle rather than
 helping. The engine prefers a rule that fits inside the budget over one that has
 to be trimmed, and says how many more follow the same way.
+
+## Haptics
+
+Vibration never fired once on an Android install, and lengthening the patterns
+did not fix it. Research settled several things that had been guesses:
+
+**The `Permissions-Policy` header is not the cause.** There is no `vibrate` or
+`vibration` policy-controlled feature — it appears only as a hypothetical in old
+Feature Policy drafts and was never specified or shipped. It is absent from the
+W3C feature registry and from MDN's full directive list, and the sensor
+directives we do send (accelerometer, gyroscope, magnetometer) address a
+different subsystem entirely. The header was left alone.
+
+**Deferring the call is fine.** `navigator.vibrate` needs _sticky_ user
+activation, which never expires and is never consumed once the document has had
+one qualifying interaction. A `requestAnimationFrame` callback or a store
+subscriber is a perfectly valid place to call it, so the drag-paint flush was
+never the problem.
+
+**`pointerdown` does not grant activation; `touchend` does.** So the first
+gesture of a session can be refused outright if it is a long press or a drag,
+which complete no tap.
+
+Two real defects were found and fixed:
+
+- **Retrigger starvation.** Each call cancels the vibration in flight rather
+  than queueing. A drag flushing once per animation frame reissued a short pulse
+  every ~16 ms, restarting a linear resonant actuator that needs longer than
+  that to spin up — perceptually, silence. A repeat of the pattern already
+  playing is now dropped; a different pattern still interrupts, so a cat
+  placement is never swallowed by paint ticks.
+- **Winning and failing had no haptic at all**, and because a winning
+  placement's event is replaced by the win event, finishing a level buzzed
+  nothing whatsoever.
+
+Every action now has its own pattern, designed as a shape rather than a
+duration: rising for a placement, falling for an undo, flat for a refusal,
+rhythmic for the win. All are odd-length, because Blink strips the trailing
+pause from an even-length pattern, and all are at least 15 ms, below which an
+LRA produces nothing detectable.
+
+Beyond that the API cannot be forced. Android's own "Use vibration and haptics"
+and "Touch feedback" toggles, Do Not Disturb and OEM battery savers all swallow
+an accepted call silently — `navigator.vibrate` returns `true` whenever Chrome
+hands the pattern to Android, regardless of what Android then does with it. So
+Settings reports which of those worlds the device is in rather than a bare
+on/off.
