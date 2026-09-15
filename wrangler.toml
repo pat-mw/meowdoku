@@ -21,13 +21,15 @@ workers_dev = true
 [observability]
 enabled = true
 
-# Generating a board is the only expensive thing a room does. Measured on the
-# multiplayer bands it costs 1-113 ms and happens at most once per level per
-# room, but the default budget leaves no headroom for a cold room replaying
-# several levels after an eviction. Note this is above the Workers Free CPU
-# allowance: the party server needs the Workers Paid plan.
-[limits]
-cpu_ms = 5000
+# No explicit CPU limit: setting one requires the Workers Paid plan, and this
+# deployment runs on the free tier. Generating a board is the only expensive
+# thing a room does — measured at 1-113 ms across the multiplayer difficulty
+# bands — and it happens at most once per level per room, with the result
+# cached for the rest of the match. Raise this deliberately if the hard band
+# starts tripping the free tier's per-invocation budget:
+#
+#   [limits]
+#   cpu_ms = 5000
 
 # One object per room code. Addressed by `idFromName(code)`, which is why the
 # Worker canonicalises the code before routing — otherwise "abc12" and "ABC12"
@@ -49,10 +51,10 @@ tag = "v1"
 new_sqlite_classes = ["Room", "Registry"]
 
 [vars]
-# Comma-separated origins allowed to open a socket. Leave unset for local
-# development, where the Vite dev server's port moves around. Set it in
-# production to exactly the frontend's origin:
+# Comma-separated origins allowed to open a socket. This is the deployed
+# frontend and nothing else: the room code is the only thing protecting a game,
+# so there is no reason for another site to be able to open a socket here.
+# Local development runs with it unset, because the Vite dev server's port
+# moves around.
 #
-#   npx wrangler secret put ALLOWED_ORIGINS   # or set it here and redeploy
-#
-# ALLOWED_ORIGINS = "https://meowdoku.vercel.app"
+ALLOWED_ORIGINS = "https://meowdoku-mu.vercel.app"

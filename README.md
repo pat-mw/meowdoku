@@ -103,8 +103,8 @@ Three settings have to agree about the two origins:
    Production and Preview. Changing it requires a redeploy.
 2. `connect-src` in the `Content-Security-Policy` in
    [vercel.json](vercel.json), which names the same host twice —
-   `https://meowdoku-party.pmassowalsh.workers.dev` for the health probe and
-   `wss://meowdoku-party.pmassowalsh.workers.dev` for the game socket. A
+   `https://meowdoku-party.pre0.workers.dev` for the health probe and
+   `wss://meowdoku-party.pre0.workers.dev` for the game socket. A
    Content-Security-Policy is a security boundary and is reviewed as source, so
    it is edited rather than configured; no wildcard, and no other origin. Point
    the Worker somewhere else and this line has to be edited in the same commit
