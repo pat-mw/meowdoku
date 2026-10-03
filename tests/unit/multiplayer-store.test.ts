@@ -111,7 +111,7 @@ const roomState = (overrides: Partial<RoomState> = {}): RoomState => ({
   code: ROOM,
   phase: 'lobby',
   hostId: ME,
-  settings: { mode: 'steady', levelCount: 3, difficulty: 'standard' },
+  settings: { mode: 'steady', levelCount: 3, difficulty: 'standard', autoX: false },
   players: [player(ME), player(RIVAL)],
   levelCount: 3,
   schedule: null,
@@ -231,8 +231,8 @@ const playingState = (levelIndex: number, schedule: LevelSpec[], mode: GameMode)
     phase: 'playing',
     settings:
       mode === 'knockout'
-        ? { mode, difficulty: 'standard' }
-        : { mode, levelCount: schedule.length as LevelCount, difficulty: 'standard' },
+        ? { mode, difficulty: 'standard', autoX: false }
+        : { mode, levelCount: schedule.length as LevelCount, difficulty: 'standard', autoX: false },
     schedule,
     levelIndex,
     levelCount: schedule.length,

@@ -52,7 +52,12 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('goes back to its lobby with nothing of the last match left on it', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'blaze', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'blaze',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     await playBlaze([ada, bo], schedule)
     expect((await ada.waitForPhase('finished')).podium).not.toBeNull()
 
@@ -81,7 +86,12 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('can then start another match, with different puzzles', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    const first = await startMatch(ada, { mode: 'blaze', levelCount: 3, difficulty: 'easy' })
+    const first = await startMatch(ada, {
+      mode: 'blaze',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     await playBlaze([ada, bo], first)
 
     ada.send({ t: 'rematch' })
@@ -102,7 +112,7 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('brings a knocked-out player back into the next knockout', async () => {
     const { clients } = await openRoom(['Ada', 'Bo', 'Cy'])
     const [ada, bo, cy] = clients as [TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy' })
+    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy', autoX: false })
     expect(schedule).toHaveLength(2)
 
     for (const client of [ada, bo, cy]) {
@@ -145,7 +155,12 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('leaves the room to somebody who is still in it when the host has gone', async () => {
     const { clients } = await openRoom(['Ada', 'Bo', 'Cy'])
     const [ada, bo, cy] = clients as [TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'blaze', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'blaze',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     await playBlaze([ada, bo, cy], schedule)
 
     ada.send({ t: 'leave' })
@@ -168,7 +183,12 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('takes a newcomer again once it is back in its lobby', async () => {
     const { code, clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'blaze', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'blaze',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     await playBlaze([ada, bo], schedule)
 
     ada.send({ t: 'rematch' })
@@ -183,7 +203,7 @@ describe.skipIf(!partyReachable)('a finished room', () => {
   it('refuses to unwind a match that is still being played', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false })
     await bo.waitFor('level', (message) => message.levelIndex === 0)
 
     const from = bo.mark()

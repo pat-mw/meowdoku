@@ -31,6 +31,7 @@ import type { PlayerId, RoomCode } from '../../src/multiplayer/protocol'
 import type { MultiplayerStore } from '../../src/multiplayer/store'
 import { useMultiplayerStore } from '../../src/multiplayer/store'
 import { MultiplayerScreen } from '../../src/screens/MultiplayerScreen'
+import { useGameStore } from '../../src/store/useGameStore'
 
 const ROOM = 'H3K9M' as RoomCode
 const OTHER_ROOM = 'W7TNK' as RoomCode
@@ -110,7 +111,7 @@ const sitInRoom = (overrides: Partial<MultiplayerStore> = {}): void => {
     ],
     // Cues would otherwise reach for an audio context the moment a podium
     // appears; nothing here is about sound.
-    preferences: { autoX: false, sound: false, haptics: false },
+    preferences: { sound: false, haptics: false },
     ...overrides,
   })
 }
@@ -144,6 +145,12 @@ const finishedMatch = (): void => {
 
 beforeEach(() => {
   navigate.mockClear()
+  // The screen pushes these into the match store on mount, so they are the
+  // ones that decide whether a podium reaches for an audio context.
+  const save = useGameStore.getState().save
+  useGameStore.setState({
+    save: { ...save, settings: { ...save.settings, sound: false, haptics: false } },
+  })
   const element = document.createElement('div')
   document.body.append(element)
   host.element = element
@@ -253,5 +260,95 @@ describe('the end of a match', () => {
     act(() => useMultiplayerStore.setState({ phase: 'lobby', podium: null }))
     expect(text()).toContain('Waiting room')
     expect(hasButton('Start match')).toBe(true)
+  })
+})
+
+describe('settings', () => {
+  const toggle = (label: string): HTMLButtonElement => {
+    const button = document.querySelector<HTMLButtonElement>(
+      `[role="switch"][aria-label="${label}"]`,
+    )
+    if (button === null) throw new Error(`no switch labelled "${label}"`)
+    return button
+  }
+
+  it('opens from the two doors with the theme and colour-blind switches in it', () => {
+    render(null)
+    press('Settings')
+    expect(document.querySelector('[role="dialog"][aria-label="Settings"]')).not.toBeNull()
+    expect(toggle('Dark mode')).toBeDefined()
+    expect(toggle('Colour-blind letters')).toBeDefined()
+    // Progress has no business being one tap away in a room.
+    expect(document.body.textContent).not.toContain('Reset progress')
+  })
+
+  it('switches the theme and the letters, and the choice outlives the sheet', () => {
+    render(null)
+    press('Settings')
+    const before = useGameStore.getState().save.settings
+    act(() => toggle('Dark mode').click())
+    act(() => toggle('Colour-blind letters').click())
+    const after = useGameStore.getState().save.settings
+    expect(after.darkMode).toBe(!before.darkMode)
+    expect(after.colorBlind).toBe(!before.colorBlind)
+    expect(document.documentElement.dataset['theme']).toBe(after.darkMode ? 'dark' : 'light')
+    pressText('Close')
+    expect(document.querySelector('[role="dialog"][aria-label="Settings"]')).toBeNull()
+  })
+
+  it('is reachable from the waiting room', () => {
+    sitInRoom()
+    render(null)
+    press('Settings')
+    expect(toggle('Dark mode')).toBeDefined()
+  })
+
+  it('leaves auto-X out, because the host sets it for the room', () => {
+    render(null)
+    press('Settings')
+    expect(document.querySelector('[role="switch"][aria-label="Auto-X after a cat"]')).toBeNull()
+  })
+
+  it('hands the sound and haptics choices to the match store', () => {
+    render(null)
+    press('Settings')
+    act(() => toggle('Sound').click())
+    expect(useMultiplayerStore.getState().preferences.sound).toBe(true)
+    act(() => toggle('Sound').click())
+    expect(useMultiplayerStore.getState().preferences.sound).toBe(false)
+  })
+})
+
+describe('auto-X in the waiting room', () => {
+  const option = (label: string): HTMLButtonElement | undefined =>
+    [...screen().querySelectorAll('button')].find(
+      (candidate) =>
+        candidate.textContent?.trim().startsWith(label) === true &&
+        candidate.closest('[aria-label="Auto-X after a cat"]') !== null,
+    )
+
+  it('lets the host turn it on for the whole room', () => {
+    sitInRoom()
+    const updateSettings = vi.fn()
+    useMultiplayerStore.setState({ updateSettings })
+    render(null)
+    const on = option('On')
+    if (on === undefined) throw new Error('no auto-X control')
+    act(() => on.click())
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ autoX: true }))
+  })
+
+  it('shows a guest what the host chose without letting them change it', () => {
+    sitInRoom({
+      hostId: RIVAL,
+      settings: { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: true },
+    })
+    const updateSettings = vi.fn()
+    useMultiplayerStore.setState({ updateSettings })
+    render(null)
+    const off = option('Off')
+    if (off === undefined) throw new Error('no auto-X control')
+    act(() => off.click())
+    expect(updateSettings).not.toHaveBeenCalled()
   })
 })

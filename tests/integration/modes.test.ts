@@ -179,7 +179,7 @@ describe.skipIf(!partyReachable)('knockout', () => {
   it('drops the slowest player each level down to a head-to-head', async () => {
     const { clients } = await openRoom(['Ada', 'Bo', 'Cy'])
     const [ada, bo, cy] = clients as [TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy' })
+    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy', autoX: false })
     // Length is a function of the room, not of a host's choice: three players
     // is one elimination and then the final.
     expect(schedule).toHaveLength(2)
@@ -213,7 +213,7 @@ describe.skipIf(!partyReachable)('knockout', () => {
   it('refuses a claim from a player who has been knocked out', async () => {
     const { clients } = await openRoom(['Ada', 'Bo', 'Cy'])
     const [ada, bo, cy] = clients as [TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy' })
+    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy', autoX: false })
 
     const first = await playLevel([ada, bo, cy], 0, schedule)
     expect(first.eliminatedId).toBe(cy.playerId)

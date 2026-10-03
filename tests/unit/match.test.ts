@@ -51,15 +51,17 @@ const blaze = (levelCount: LevelCount = 3): RoomSettings => ({
   mode: 'blaze',
   levelCount,
   difficulty: 'easy',
+  autoX: false,
 })
 
 const steady = (levelCount: LevelCount = 3): RoomSettings => ({
   mode: 'steady',
   levelCount,
   difficulty: 'easy',
+  autoX: false,
 })
 
-const knockout = (): RoomSettings => ({ mode: 'knockout', difficulty: 'easy' })
+const knockout = (): RoomSettings => ({ mode: 'knockout', difficulty: 'easy', autoX: false })
 
 /** Creates a match and runs the countdown out, so it is on its first level. */
 const startMatch = (settings: RoomSettings, ids: string[], startedAt = T0): MatchState =>
@@ -187,7 +189,7 @@ describe('how many levels a match plays', () => {
   })
 
   it('gives knockout no settable length at all', () => {
-    expect('levelCount' in defaultSettingsFor('knockout', 'easy')).toBe(false)
+    expect('levelCount' in defaultSettingsFor('knockout', 'easy', false)).toBe(false)
     expect(levelCountFor(knockout(), 5)).toBe(4)
   })
 })
@@ -770,7 +772,16 @@ describe('the wire contract', () => {
     expect(decodeSettings({ mode: 'knockout', difficulty: 'easy', levelCount: 99 })).toEqual({
       mode: 'knockout',
       difficulty: 'easy',
+      autoX: false,
     })
+  })
+
+  it("carries the host's auto-X choice, and reads anything but a plain true as off", () => {
+    const steady = { mode: 'steady', levelCount: 3, difficulty: 'easy' }
+    expect(decodeSettings({ ...steady, autoX: true })?.autoX).toBe(true)
+    expect(decodeSettings({ ...steady, autoX: false })?.autoX).toBe(false)
+    expect(decodeSettings(steady)?.autoX).toBe(false)
+    expect(decodeSettings({ ...steady, autoX: 'yes' })?.autoX).toBe(false)
   })
 
   it('rejects a level count the host cannot have chosen', () => {

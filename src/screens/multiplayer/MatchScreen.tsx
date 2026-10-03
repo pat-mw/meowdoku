@@ -60,12 +60,20 @@ import {
 } from '../../multiplayer/store'
 import { useGameStore } from '../../store/useGameStore'
 import { Board } from '../../ui/Board'
-import { BackButton, DangerButton, Overlay, Pill, PrimaryButton } from '../../ui/chrome'
+import {
+  BackButton,
+  DangerButton,
+  Overlay,
+  Pill,
+  PrimaryButton,
+  SettingsButton,
+} from '../../ui/chrome'
 import { CatFace, CatPip, Fish } from '../../ui/icons'
 import { CountdownClock, ElapsedClock, useSecondsUntil } from '../../ui/multiplayer/clocks'
 import { playRaceCue } from '../../ui/multiplayer/cues'
 import { formatDuration } from '../../ui/multiplayer/format'
 import { ProgressRace } from '../../ui/multiplayer/ProgressRace'
+import { useMultiplayerSettings } from '../../ui/multiplayer/settingsContext'
 
 /** A stable empty board, so the input hooks never see a fresh array identity. */
 const EMPTY_CELLS: readonly CellState[] = []
@@ -104,11 +112,13 @@ export function MatchScreen({ onLeave }: MatchScreenProps) {
   const me = useMultiplayerStore(selectMe)
   const dispatch = useMultiplayerStore((state) => state.dispatch)
 
-  // Read, never written. The colour-blind setting is an accessibility choice a
-  // player made once and must not have to make again because they opened a
-  // different screen; multiplayer's promise is that it never *writes* the
-  // single-player save, not that it ignores what the player has told the app.
+  // The colour-blind setting is an accessibility choice a player made once and
+  // must not have to make again because they opened a different screen.
+  // Multiplayer's promise is that it never touches single-player *progress*,
+  // not that it ignores what the player has told the app; the settings sheet
+  // can change this mid-match and the board follows straight away.
   const colorBlind = useGameStore((state) => state.save.settings.colorBlind)
+  const settingsSheet = useMultiplayerSettings()
 
   const [leaving, setLeaving] = useState(false)
 
@@ -116,7 +126,12 @@ export function MatchScreen({ onLeave }: MatchScreenProps) {
   const spectating = me !== null && me.eliminatedAtLevel !== null
   const boardReady = game !== null && level !== null && !loadingLevel
   const interactive =
-    boardReady && game.status === 'playing' && phase === 'playing' && !leaving && !spectating
+    boardReady &&
+    game.status === 'playing' &&
+    phase === 'playing' &&
+    !leaving &&
+    !spectating &&
+    settingsSheet?.open !== true
 
   const cells = game?.cells ?? EMPTY_CELLS
   const onGesture = (gesture: BoardGesture) => {
@@ -184,6 +199,7 @@ export function MatchScreen({ onLeave }: MatchScreenProps) {
           />
         )}
       </Pill>
+      {settingsSheet !== null ? <SettingsButton onClick={settingsSheet.show} /> : null}
     </header>
   )
 
@@ -436,7 +452,7 @@ function SolvedPanel({ elapsedMs, synced }: { elapsedMs: number; synced: boolean
  */
 function OutOfFishOverlay() {
   const level = useMultiplayerStore((state) => state.level)
-  const autoX = useMultiplayerStore((state) => state.preferences.autoX)
+  const autoX = useMultiplayerStore((state) => state.settings.autoX)
 
   const restart = () => {
     if (level === null) return

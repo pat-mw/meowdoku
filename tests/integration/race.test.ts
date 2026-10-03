@@ -34,7 +34,7 @@ describe.skipIf(!partyReachable)('the progress bar', () => {
   it('carries one player’s cats to the other, in order', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false })
     await ada.waitFor('level', (message) => message.levelIndex === 0)
     await bo.waitFor('level', (message) => message.levelIndex === 0)
 
@@ -82,7 +82,12 @@ describe.skipIf(!partyReachable)('the progress bar', () => {
   it('clamps a claim of more cats than the board holds', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'steady',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     const size = schedule[0]?.size ?? 0
     expect(size).toBeGreaterThan(0)
     await ada.waitFor('level', (message) => message.levelIndex === 0)
@@ -109,7 +114,12 @@ describe.skipIf(!partyReachable)('timing authority', () => {
   it('ignores a claimed time and ranks by the server’s own measurement', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'steady',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     await ada.waitFor('level', (message) => message.levelIndex === 0)
     await bo.waitFor('level', (message) => message.levelIndex === 0)
 
@@ -141,7 +151,12 @@ describe.skipIf(!partyReachable)('timing authority', () => {
   it('refuses a solution that is not the board’s', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada] = clients as [TestClient]
-    const schedule = await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'steady',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     const spec = schedule[0]
     if (!spec) throw new Error('no first level')
     await ada.waitFor('level', (message) => message.levelIndex === 0)

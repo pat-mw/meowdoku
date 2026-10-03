@@ -134,22 +134,34 @@ export const DEFAULT_DIFFICULTY: MatchDifficulty = 'standard'
  * Knockout's length is a function of how many players are in the room — one
  * elimination per level until two remain — so making it settable would create
  * a value that could disagree with the rules. Unrepresentable beats documented.
+ *
+ * `autoX` is here rather than in each player's own settings because it makes
+ * the game easier: crossing out a cat's row, column and neighbours by hand is
+ * part of the work, and a race where some players have it done for them is not
+ * the same race. So it is the host's call, and it holds for everyone.
  */
 export type RoomSettings =
-  | { mode: 'blaze'; levelCount: LevelCount; difficulty: MatchDifficulty }
-  | { mode: 'steady'; levelCount: LevelCount; difficulty: MatchDifficulty }
-  | { mode: 'knockout'; difficulty: MatchDifficulty }
+  | { mode: 'blaze'; levelCount: LevelCount; difficulty: MatchDifficulty; autoX: boolean }
+  | { mode: 'steady'; levelCount: LevelCount; difficulty: MatchDifficulty; autoX: boolean }
+  | { mode: 'knockout'; difficulty: MatchDifficulty; autoX: boolean }
 
-/** The lobby's opening state: a five-level steady match at standard difficulty. */
+/** The lobby's opening state: a five-level steady match at standard difficulty, marked by hand. */
 export const DEFAULT_SETTINGS: RoomSettings = {
   mode: 'steady',
   levelCount: DEFAULT_LEVEL_COUNT,
   difficulty: DEFAULT_DIFFICULTY,
+  autoX: false,
 }
 
-/** Settings for a mode, keeping the difficulty the host already picked. */
-export const defaultSettingsFor = (mode: GameMode, difficulty: MatchDifficulty): RoomSettings =>
-  mode === 'knockout' ? { mode, difficulty } : { mode, levelCount: DEFAULT_LEVEL_COUNT, difficulty }
+/** Settings for a mode, keeping the difficulty and auto-X the host already picked. */
+export const defaultSettingsFor = (
+  mode: GameMode,
+  difficulty: MatchDifficulty,
+  autoX: boolean,
+): RoomSettings =>
+  mode === 'knockout'
+    ? { mode, difficulty, autoX }
+    : { mode, levelCount: DEFAULT_LEVEL_COUNT, difficulty, autoX }
 
 /**
  * A room's lifecycle.
@@ -411,15 +423,20 @@ export const isLevelCount = (value: unknown): value is LevelCount =>
  *
  * Returns a fresh object rather than the input, so a host cannot smuggle extra
  * fields into the state the server broadcasts to everyone else.
+ *
+ * A missing or malformed `autoX` reads as off rather than failing the whole
+ * frame: settings from a client or a snapshot older than the field are still
+ * good settings, and off is the side that keeps the race honest.
  */
 export const decodeSettings = (value: unknown): RoomSettings | null => {
   if (!isRecord(value)) return null
   const { mode, difficulty } = value
   if (!isGameMode(mode) || !isMatchDifficulty(difficulty)) return null
-  if (mode === 'knockout') return { mode, difficulty }
+  const autoX = value.autoX === true
+  if (mode === 'knockout') return { mode, difficulty, autoX }
   const { levelCount } = value
   if (!isLevelCount(levelCount)) return null
-  return { mode, levelCount, difficulty }
+  return { mode, levelCount, difficulty, autoX }
 }
 
 /**

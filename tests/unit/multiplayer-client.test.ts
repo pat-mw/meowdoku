@@ -134,7 +134,7 @@ const roomState = (overrides: Partial<RoomState> = {}): RoomState => ({
   code: ROOM,
   phase: 'lobby',
   hostId: 'p1',
-  settings: { mode: 'steady', levelCount: 5, difficulty: 'standard' },
+  settings: { mode: 'steady', levelCount: 5, difficulty: 'standard', autoX: false },
   players: [],
   levelCount: 5,
   schedule: null,

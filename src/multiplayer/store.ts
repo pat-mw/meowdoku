@@ -22,9 +22,10 @@
  * Nothing here touches the single-player save. This store is entirely separate
  * from `useGameStore`, writes to no storage of its own, and a multiplayer
  * connection dying has no path by which it could disturb a single-player game.
- * The two settings multiplayer honours — auto-marking, and whether sound and
- * haptics are on — are pushed in by the screen through `setPreferences` rather
- * than read out of the save, so the dependency runs one way only.
+ * The two settings multiplayer honours — whether sound and haptics are on — are
+ * pushed in by the screen through `setPreferences` rather than read out of the
+ * save, so the dependency runs one way only. Auto-marking is not one of them:
+ * it changes how hard the game is, so it is a room setting the host picks.
  */
 
 import { create } from 'zustand'
@@ -94,7 +95,6 @@ export type AcceptedSolve = {
 
 /** The two single-player settings a multiplayer board honours. */
 export type MultiplayerPreferences = {
-  autoX: boolean
   sound: boolean
   haptics: boolean
 }
@@ -218,7 +218,7 @@ const initialState = {
   matchStartsAt: null,
   accepted: null,
   lastResult: null,
-  preferences: { autoX: false, sound: true, haptics: true } as MultiplayerPreferences,
+  preferences: { sound: true, haptics: true } as MultiplayerPreferences,
 } satisfies Omit<
   MultiplayerStore,
   | 'setPreferences'
@@ -365,7 +365,7 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
    * behind for it to be read from.
    */
   const openLevelAt = async (levelIndex: number): Promise<void> => {
-    const { schedule, preferences, game, myLevelIndex } = get()
+    const { schedule, settings, game, myLevelIndex } = get()
     const spec = schedule?.[levelIndex]
     if (spec === undefined) return
     if (levelIndex === myLevelIndex && game !== null && game.levelNumber === spec.levelNumber)
@@ -392,7 +392,7 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
           lives: MULTIPLAYER_LIVES,
           reveals: 0,
           hints: 0,
-          autoX: preferences.autoX,
+          autoX: settings.autoX,
         }),
         loadingLevel: false,
         levelStartedAt: Date.now(),
@@ -537,14 +537,7 @@ export const useMultiplayerStore = create<MultiplayerStore>((set, get) => {
     ...initialState,
 
     setPreferences: (preferences) => {
-      const next = { ...get().preferences, ...preferences }
-      set({ preferences: next })
-      // Auto-marking is a property of the board in play, so a mid-match change
-      // has to reach the reducer rather than only the next level.
-      const game = get().game
-      if (game !== null && game.autoX !== next.autoX) {
-        set({ game: reduce(game, { type: 'setAutoX', value: next.autoX }) })
-      }
+      set({ preferences: { ...get().preferences, ...preferences } })
     },
 
     hostRoom: async (rawName) => {

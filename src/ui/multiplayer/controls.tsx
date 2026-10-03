@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { BackButton } from '../chrome'
+import { BackButton, SettingsButton } from '../chrome'
+import { useMultiplayerSettings } from './settingsContext'
 
 /**
  * The form furniture multiplayer needs and the rest of the game does not.
@@ -21,7 +22,7 @@ import { BackButton } from '../chrome'
 
 /**
  * The header every multiplayer screen wears: a back button, a centred heading
- * and an optional trailing control.
+ * and a trailing control — the settings button unless a screen supplies its own.
  *
  * The empty span is load-bearing. Without something the same size as the back
  * button on the right, a centred `flex-1` heading is centred in the space that
@@ -39,13 +40,19 @@ export function ScreenHeader({
   backLabel?: string
   trailing?: ReactNode
 }) {
+  const settings = useMultiplayerSettings()
   return (
     <header className="flex items-center">
       <BackButton label={backLabel} onClick={onBack} />
       <h1 className="flex-1 truncate px-2 text-center text-2xl font-black text-[var(--mdk-ink)]">
         {title}
       </h1>
-      {trailing ?? <span aria-hidden="true" className="h-12 w-12 flex-none" />}
+      {trailing ??
+        (settings !== null ? (
+          <SettingsButton onClick={settings.show} />
+        ) : (
+          <span aria-hidden="true" className="h-12 w-12 flex-none" />
+        ))}
     </header>
   )
 }

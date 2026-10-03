@@ -103,7 +103,7 @@ describe.skipIf(!partyReachable)('a player id', () => {
     const { code, clients } = await openRoom(['Ada', 'Bo'])
     const [ada] = clients as [TestClient]
     const adaId = ada.playerId as string
-    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false })
     await ada.waitFor('level', (message) => message.levelIndex === 0)
 
     // The resume path used to be tried before the door was checked, so a forged
@@ -126,7 +126,7 @@ describe.skipIf(!partyReachable)('a player id', () => {
   it('cannot forfeit somebody else’s level', async () => {
     const { code, clients } = await openRoom(['Ada', 'Bo', 'Cy'])
     const [ada, bo, cy] = clients as [TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy' })
+    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy', autoX: false })
     for (const client of [ada, bo, cy]) {
       await client.waitFor('level', (message) => message.levelIndex === 0)
     }
@@ -177,7 +177,12 @@ describe.skipIf(!partyReachable)('a seat token', () => {
     const [ada, bo] = clients as [TestClient, TestClient]
     const adaId = ada.playerId as string
     const adaToken = ada.token as string
-    const schedule = await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'steady',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
 
     await ada.waitFor('level', (message) => message.levelIndex === 0)
     await bo.waitFor('level', (message) => message.levelIndex === 0)
