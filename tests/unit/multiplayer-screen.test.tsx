@@ -111,7 +111,7 @@ const sitInRoom = (overrides: Partial<MultiplayerStore> = {}): void => {
     ],
     // Cues would otherwise reach for an audio context the moment a podium
     // appears; nothing here is about sound.
-    preferences: { autoX: false, sound: false, haptics: false },
+    preferences: { sound: false, haptics: false },
     ...overrides,
   })
 }
@@ -303,6 +303,12 @@ describe('settings', () => {
     expect(toggle('Dark mode')).toBeDefined()
   })
 
+  it('leaves auto-X out, because the host sets it for the room', () => {
+    render(null)
+    press('Settings')
+    expect(document.querySelector('[role="switch"][aria-label="Auto-X after a cat"]')).toBeNull()
+  })
+
   it('hands the sound and haptics choices to the match store', () => {
     render(null)
     press('Settings')
@@ -310,5 +316,39 @@ describe('settings', () => {
     expect(useMultiplayerStore.getState().preferences.sound).toBe(true)
     act(() => toggle('Sound').click())
     expect(useMultiplayerStore.getState().preferences.sound).toBe(false)
+  })
+})
+
+describe('auto-X in the waiting room', () => {
+  const option = (label: string): HTMLButtonElement | undefined =>
+    [...screen().querySelectorAll('button')].find(
+      (candidate) =>
+        candidate.textContent?.trim().startsWith(label) === true &&
+        candidate.closest('[aria-label="Auto-X after a cat"]') !== null,
+    )
+
+  it('lets the host turn it on for the whole room', () => {
+    sitInRoom()
+    const updateSettings = vi.fn()
+    useMultiplayerStore.setState({ updateSettings })
+    render(null)
+    const on = option('On')
+    if (on === undefined) throw new Error('no auto-X control')
+    act(() => on.click())
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ autoX: true }))
+  })
+
+  it('shows a guest what the host chose without letting them change it', () => {
+    sitInRoom({
+      hostId: RIVAL,
+      settings: { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: true },
+    })
+    const updateSettings = vi.fn()
+    useMultiplayerStore.setState({ updateSettings })
+    render(null)
+    const off = option('Off')
+    if (off === undefined) throw new Error('no auto-X control')
+    act(() => off.click())
+    expect(updateSettings).not.toHaveBeenCalled()
   })
 })

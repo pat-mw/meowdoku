@@ -66,16 +66,15 @@ export function MultiplayerScreen({ roomCode }: { roomCode: string | null }) {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // The three settings the match store acts on are pushed into it from the
-  // save, here and on every change, so a toggle in the settings sheet takes
-  // effect on the very next mark. The store never reads the save itself; the
-  // dependency runs one way.
+  // Sound and haptics are pushed into the match store from the save, here and
+  // on every change, so a toggle in the settings sheet takes effect on the very
+  // next mark. The store never reads the save itself; the dependency runs one
+  // way. Auto-X is deliberately not among them — the host sets it for the room.
   const sound = useGameStore((state) => state.save.settings.sound)
   const haptics = useGameStore((state) => state.save.settings.haptics)
-  const autoX = useGameStore((state) => state.save.settings.autoX)
   useEffect(() => {
-    useMultiplayerStore.getState().setPreferences({ sound, haptics, autoX })
-  }, [sound, haptics, autoX])
+    useMultiplayerStore.getState().setPreferences({ sound, haptics })
+  }, [sound, haptics])
 
   const [chosen, setChosen] = useState<Choice | null>(null)
   const approach: Approach =

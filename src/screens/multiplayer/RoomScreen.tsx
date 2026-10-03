@@ -87,6 +87,21 @@ const DIFFICULTY_OPTIONS: readonly SegmentedOption<MatchDifficulty>[] = [
   { value: 'hard', label: 'Hard', description: 'Nine cats, and a longer clock to place them.' },
 ]
 
+type AutoXChoice = 'off' | 'on'
+
+/**
+ * A room setting rather than a personal one because it makes the puzzles
+ * easier, and a race only means something if everyone is solving the same one.
+ */
+const AUTO_X_OPTIONS: readonly SegmentedOption<AutoXChoice>[] = [
+  { value: 'off', label: 'Off', description: 'Everyone crosses out squares by hand.' },
+  {
+    value: 'on',
+    label: 'On',
+    description: 'Placing a cat crosses out its row, column and neighbours for everyone.',
+  },
+]
+
 const LENGTH_OPTIONS: readonly SegmentedOption<`${LevelCount}`>[] = LEVEL_COUNT_OPTIONS.map(
   (count) => ({ value: `${count}` as const, label: `${count}` }),
 )
@@ -151,27 +166,27 @@ export function RoomScreen({
   const chooseMode = (mode: GameMode): void => {
     if (mode === settings.mode) return
     if (mode === 'knockout') {
-      updateSettings({ mode, difficulty: settings.difficulty })
+      updateSettings({ mode, difficulty: settings.difficulty, autoX: settings.autoX })
       return
     }
     // Switching between the two timed modes keeps the length the host already
     // chose; arriving from knockout there is none to keep.
     const levelCount = settings.mode === 'knockout' ? DEFAULT_LEVEL_COUNT : settings.levelCount
-    updateSettings({ mode, levelCount, difficulty: settings.difficulty })
+    updateSettings({ mode, levelCount, difficulty: settings.difficulty, autoX: settings.autoX })
   }
 
   const chooseDifficulty = (difficulty: MatchDifficulty): void => {
-    updateSettings(
-      settings.mode === 'knockout'
-        ? { mode: 'knockout', difficulty }
-        : { mode: settings.mode, levelCount: settings.levelCount, difficulty },
-    )
+    updateSettings({ ...settings, difficulty })
+  }
+
+  const chooseAutoX = (value: AutoXChoice): void => {
+    updateSettings({ ...settings, autoX: value === 'on' })
   }
 
   const chooseLength = (value: string): void => {
     if (settings.mode === 'knockout') return
     const levelCount = Number(value) as LevelCount
-    updateSettings({ mode: settings.mode, levelCount, difficulty: settings.difficulty })
+    updateSettings({ ...settings, levelCount })
   }
 
   const commitRename = (): void => {
@@ -296,6 +311,14 @@ export function RoomScreen({
             options={DIFFICULTY_OPTIONS}
             value={settings.difficulty}
             onChange={chooseDifficulty}
+            readOnly={readOnly}
+          />
+
+          <SegmentedControl
+            label="Auto-X after a cat"
+            options={AUTO_X_OPTIONS}
+            value={settings.autoX ? 'on' : 'off'}
+            onChange={chooseAutoX}
             readOnly={readOnly}
           />
         </section>

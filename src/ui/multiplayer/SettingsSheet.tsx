@@ -2,13 +2,16 @@ import { useGameStore } from '../../store/useGameStore'
 import type { Settings } from '../../store/save'
 import { Overlay, PrimaryButton, Toggle } from '../chrome'
 
-/** The settings a player can reach mid-room, in the order the sheet lists them. */
+/**
+ * The settings a player can reach mid-room, in the order the sheet lists them.
+ * Auto-X is missing on purpose: it makes the puzzles easier, so the host picks
+ * it for the whole room in the waiting room instead.
+ */
 const TOGGLES: readonly { key: keyof Settings; label: string }[] = [
   { key: 'darkMode', label: 'Dark mode' },
   { key: 'colorBlind', label: 'Colour-blind letters' },
   { key: 'sound', label: 'Sound' },
   { key: 'haptics', label: 'Haptics' },
-  { key: 'autoX', label: 'Auto-X after a cat' },
 ]
 
 /**

@@ -53,7 +53,12 @@ describe.skipIf(!partyReachable)('a dropped connection', () => {
     const { code, clients } = await openRoom(['Ada', 'Bo'])
     const [ada, bo] = clients as [TestClient, TestClient]
     const adaId = ada.playerId
-    const schedule = await startMatch(ada, { mode: 'steady', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(ada, {
+      mode: 'steady',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
 
     const started = await bo.waitFor('level', (message) => message.levelIndex === 0)
     await ada.waitFor('level', (message) => message.levelIndex === 0)
@@ -116,7 +121,12 @@ describe.skipIf(!partyReachable)('the host leaving', () => {
     expect(seenByCy.hostId).toBe(bo.playerId)
 
     // The role is real, not cosmetic: the server takes a start from the new host.
-    const schedule = await startMatch(bo, { mode: 'blaze', levelCount: 3, difficulty: 'easy' })
+    const schedule = await startMatch(bo, {
+      mode: 'blaze',
+      levelCount: 3,
+      difficulty: 'easy',
+      autoX: false,
+    })
     expect(schedule).toHaveLength(3)
     expect((await cy.waitForPhase('countdown')).hostId).toBe(bo.playerId)
   })
@@ -130,7 +140,7 @@ describe.skipIf(!partyReachable)('a knockout that loses players early', () => {
   it('ends at the survivor rather than at the end of the schedule', async () => {
     const { clients } = await openRoom(['Ada', 'Bo', 'Cy', 'Dee'])
     const [ada, bo, cy, dee] = clients as [TestClient, TestClient, TestClient, TestClient]
-    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy' })
+    const schedule = await startMatch(ada, { mode: 'knockout', difficulty: 'easy', autoX: false })
     // Four players were in the room when the host pressed start, so three
     // levels were scheduled.
     expect(schedule).toHaveLength(3)

@@ -118,7 +118,10 @@ describe.skipIf(!partyReachable)('lobby', () => {
   it('refuses a newcomer once the match has started', async () => {
     const { code, clients } = await openRoom(['Ada', 'Bo'])
     const [ada] = clients as [TestClient]
-    ada.send({ t: 'settings', settings: { mode: 'steady', levelCount: 3, difficulty: 'easy' } })
+    ada.send({
+      t: 'settings',
+      settings: { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false },
+    })
     ada.send({ t: 'start' })
     await ada.waitFor('countdown')
 
@@ -131,7 +134,10 @@ describe.skipIf(!partyReachable)('lobby', () => {
   it('only lets the host change the mode or start', async () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [, bo] = clients as [TestClient, TestClient]
-    bo.send({ t: 'settings', settings: { mode: 'blaze', levelCount: 3, difficulty: 'easy' } })
+    bo.send({
+      t: 'settings',
+      settings: { mode: 'blaze', levelCount: 3, difficulty: 'easy', autoX: false },
+    })
     const refusedSettings = await bo.waitFor('error')
     expect(refusedSettings.code).toBe('not-host')
 
@@ -147,7 +153,7 @@ describe.skipIf(!partyReachable)('lobby', () => {
     const { clients } = await openRoom(['Ada', 'Bo'])
     const [ada] = clients as [TestClient]
     const from = ada.mark()
-    ada.send({ t: 'settings', settings: { mode: 'knockout', difficulty: 'easy' } })
+    ada.send({ t: 'settings', settings: { mode: 'knockout', difficulty: 'easy', autoX: false } })
     await ada.waitForState((state) => state.settings.mode === 'knockout', { from })
     ada.send({ t: 'start' })
     const error = await ada.waitFor('error', () => true, { from })

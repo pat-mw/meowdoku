@@ -452,7 +452,7 @@ function SolvedPanel({ elapsedMs, synced }: { elapsedMs: number; synced: boolean
  */
 function OutOfFishOverlay() {
   const level = useMultiplayerStore((state) => state.level)
-  const autoX = useMultiplayerStore((state) => state.preferences.autoX)
+  const autoX = useMultiplayerStore((state) => state.settings.autoX)
 
   const restart = () => {
     if (level === null) return

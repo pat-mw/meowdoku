@@ -4,7 +4,7 @@ import { createMatch } from '../../src/multiplayer/match'
 import { DEFAULT_SETTINGS } from '../../src/multiplayer/protocol'
 
 const match = createMatch({
-  settings: { mode: 'steady', levelCount: 3, difficulty: 'easy' },
+  settings: { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false },
   seed: 'ACDEF:1000',
   players: ['a', 'b'],
   startedAt: 1000,
@@ -14,7 +14,7 @@ const snapshot: RoomSnapshot = {
   v: SNAPSHOT_VERSION,
   phase: 'playing',
   hostId: 'a',
-  settings: { mode: 'steady', levelCount: 3, difficulty: 'easy' },
+  settings: { mode: 'steady', levelCount: 3, difficulty: 'easy', autoX: false },
   seats: [
     { id: 'a', name: 'Milo', joinedAt: 1, token: 'tok-a', disconnectedAt: null },
     { id: 'b', name: 'Suki', joinedAt: 2, token: 'tok-b', disconnectedAt: 5000 },
