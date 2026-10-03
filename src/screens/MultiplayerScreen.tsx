@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   selectCanRematch,
@@ -6,6 +6,9 @@ import {
   selectPhase,
   useMultiplayerStore,
 } from '../multiplayer/store'
+import { useGameStore } from '../store/useGameStore'
+import { SettingsSheet } from '../ui/multiplayer/SettingsSheet'
+import { MultiplayerSettingsContext } from '../ui/multiplayer/settingsContext'
 import { CreateRoomScreen } from './multiplayer/CreateRoomScreen'
 import { JoinRoomScreen } from './multiplayer/JoinRoomScreen'
 import { LobbyScreen } from './multiplayer/LobbyScreen'
@@ -61,6 +64,19 @@ export function MultiplayerScreen({ roomCode }: { roomCode: string | null }) {
   const canRematch = useMultiplayerStore(selectCanRematch)
   const rematch = useMultiplayerStore((state) => state.rematch)
 
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // The three settings the match store acts on are pushed into it from the
+  // save, here and on every change, so a toggle in the settings sheet takes
+  // effect on the very next mark. The store never reads the save itself; the
+  // dependency runs one way.
+  const sound = useGameStore((state) => state.save.settings.sound)
+  const haptics = useGameStore((state) => state.save.settings.haptics)
+  const autoX = useGameStore((state) => state.save.settings.autoX)
+  useEffect(() => {
+    useMultiplayerStore.getState().setPreferences({ sound, haptics, autoX })
+  }, [sound, haptics, autoX])
+
   const [chosen, setChosen] = useState<Choice | null>(null)
   const approach: Approach =
     chosen !== null && chosen.link === roomCode
@@ -83,46 +99,65 @@ export function MultiplayerScreen({ roomCode }: { roomCode: string | null }) {
     void navigate({ to: '/' })
   }
 
-  if (code === null) {
-    if (approach === 'creating') {
+  const screen = ((): ReactNode => {
+    if (code === null) {
+      if (approach === 'creating') {
+        return (
+          // Nothing to do on success beyond noting that the fork is where a
+          // later Leave should land: the store now holds a code, and that alone
+          // is what moves this screen on to the room.
+          <CreateRoomScreen
+            onBack={() => choose('choosing')}
+            onCreated={() => choose('choosing')}
+          />
+        )
+      }
+      if (approach === 'joining') {
+        return (
+          <JoinRoomScreen
+            initialCode={roomCode ?? ''}
+            onBack={() => choose('choosing')}
+            onJoined={() => choose('choosing')}
+          />
+        )
+      }
       return (
-        // Nothing to do on success beyond noting that the fork is where a
-        // later Leave should land: the store now holds a code, and that alone
-        // is what moves this screen on to the room.
-        <CreateRoomScreen onBack={() => choose('choosing')} onCreated={() => choose('choosing')} />
-      )
-    }
-    if (approach === 'joining') {
-      return (
-        <JoinRoomScreen
-          initialCode={roomCode ?? ''}
-          onBack={() => choose('choosing')}
-          onJoined={() => choose('choosing')}
+        <LobbyScreen
+          onCreate={() => choose('creating')}
+          onJoin={() => choose('joining')}
+          onExit={exit}
         />
       )
     }
-    return (
-      <LobbyScreen
-        onCreate={() => choose('creating')}
-        onJoin={() => choose('joining')}
-        onExit={exit}
-      />
-    )
-  }
 
-  switch (phase) {
-    case 'lobby':
-      return <RoomScreen onLeave={leaveRoom} />
-    case 'countdown':
-    case 'playing':
-      // The match screen draws its own countdown, so both phases are its.
-      return <MatchScreen onLeave={leaveRoom} />
-    case 'interlude':
-      return <InterludeScreen />
-    case 'finished':
-      // A rematch is a message to the room, not a screen change: the server
-      // moves everybody back to the lobby together and this screen follows the
-      // phase, exactly as it does for every other transition.
-      return <PodiumScreen onLeave={leaveRoom} onRematch={canRematch ? rematch : undefined} />
-  }
+    switch (phase) {
+      case 'lobby':
+        return <RoomScreen onLeave={leaveRoom} />
+      case 'countdown':
+      case 'playing':
+        // The match screen draws its own countdown, so both phases are its.
+        return <MatchScreen onLeave={leaveRoom} />
+      case 'interlude':
+        return <InterludeScreen />
+      case 'finished':
+        // A rematch is a message to the room, not a screen change: the server
+        // moves everybody back to the lobby together and this screen follows the
+        // phase, exactly as it does for every other transition.
+        return <PodiumScreen onLeave={leaveRoom} onRematch={canRematch ? rematch : undefined} />
+    }
+  })()
+
+  return (
+    <MultiplayerSettingsContext.Provider
+      value={{ open: settingsOpen, show: () => setSettingsOpen(true) }}
+    >
+      {screen}
+      {settingsOpen ? (
+        <SettingsSheet
+          onClose={() => setSettingsOpen(false)}
+          inMatch={code !== null && (phase === 'countdown' || phase === 'playing')}
+        />
+      ) : null}
+    </MultiplayerSettingsContext.Provider>
+  )
 }
