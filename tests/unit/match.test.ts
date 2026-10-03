@@ -189,7 +189,7 @@ describe('how many levels a match plays', () => {
   })
 
   it('gives knockout no settable length at all', () => {
-    expect('levelCount' in defaultSettingsFor('knockout', 'easy')).toBe(false)
+    expect('levelCount' in defaultSettingsFor('knockout', 'easy', false)).toBe(false)
     expect(levelCountFor(knockout(), 5)).toBe(4)
   })
 })
