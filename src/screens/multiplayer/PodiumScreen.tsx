@@ -10,8 +10,8 @@
  * The podium itself is a podium: three blocks of different heights, because
  * that shape says "these three, in this order" before a word has been read, and
  * because on a phone it is the one arrangement that puts first place in the
- * middle where the eye already is. Everyone from fourth down is a table, which
- * is what fourth place deserves and no less.
+ * middle where the eye already is. Beneath it, everyone is listed in a
+ * leaderboard that rises in from last place to first.
  *
  * `PodiumEntry.place` comes from the server. Nothing here re-ranks anybody.
  */
@@ -29,6 +29,9 @@ import { formatDuration, ordinal } from '../../ui/multiplayer/format'
 import { Crown } from '../../ui/multiplayer/icons'
 import { racerColorsFor } from '../../ui/multiplayer/race'
 import { ResultTable, type ResultRow } from '../../ui/multiplayer/ResultTable'
+
+/** Gap between leaderboard rows landing, last place first. */
+const LEADERBOARD_STEP_MS = 120
 
 /** Block heights for second, first and third, in the order they are drawn. */
 const BLOCK_HEIGHT: Record<number, number> = { 1: 82, 2: 58, 3: 44 }
@@ -99,7 +102,6 @@ export function PodiumScreen({ onLeave, onRematch }: PodiumScreenProps) {
 
   const ordered = [...podium].sort((a, b) => a.place - b.place)
   const top = ordered.filter((entry) => entry.place <= 3)
-  const rest = ordered.filter((entry) => entry.place > 3)
   // Second, first, third: the order they stand in, not the order they finished.
   const arranged = [2, 1, 3]
     .map((place) => top.find((entry) => entry.place === place) ?? null)
@@ -151,17 +153,18 @@ export function PodiumScreen({ onLeave, onRematch }: PodiumScreenProps) {
           ))}
         </div>
 
-        {rest.length === 0 ? null : (
-          <div
-            className="flex-none rounded-[var(--mdk-radius-card)] bg-[var(--mdk-card)] px-2.5 py-3"
-            style={{ boxShadow: 'var(--mdk-shadow-card)' }}
-          >
-            <ResultTable
-              caption="And the rest"
-              rows={rest.map((entry) => podiumRow(entry, settings.mode, nameOf, colorOf, playerId))}
-            />
-          </div>
-        )}
+        <div
+          className="flex-none rounded-[var(--mdk-radius-card)] bg-[var(--mdk-card)] px-2.5 py-3"
+          style={{ boxShadow: 'var(--mdk-shadow-card)' }}
+        >
+          <ResultTable
+            caption="Leaderboard"
+            revealStepMs={LEADERBOARD_STEP_MS}
+            rows={ordered.map((entry) =>
+              podiumRow(entry, settings.mode, nameOf, colorOf, playerId),
+            )}
+          />
+        </div>
       </div>
 
       <div className="flex flex-none flex-col gap-1">
@@ -272,7 +275,12 @@ const podiumRow = (
     color: colorOf(entry.playerId),
     value: stat.value,
     note: stat.note,
-    tone: entry.status === 'knocked-out' || entry.status === 'left' ? 'out' : 'normal',
+    tone:
+      entry.status === 'knocked-out' || entry.status === 'left'
+        ? 'out'
+        : entry.place === 1
+          ? 'winner'
+          : 'normal',
     isMe: entry.playerId === playerId,
   }
 }
