@@ -31,9 +31,16 @@ export type ResultRow = {
 export function ResultTable({
   rows,
   caption,
+  revealStepMs,
 }: {
   rows: readonly ResultRow[]
   caption?: ReactNode
+  /**
+   * When set, rows rise into place one after another, last row first, this many
+   * milliseconds apart, so the leader lands last. Left unset the table simply
+   * appears. Reduced motion is honoured by the global rule in tokens.css.
+   */
+  revealStepMs?: number | undefined
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -43,15 +50,27 @@ export function ResultTable({
         </div>
       )}
       <ol className="flex flex-col gap-1">
-        {rows.map((row) => (
-          <ResultRowView key={row.key} row={row} />
+        {rows.map((row, index) => (
+          <ResultRowView
+            key={row.key}
+            row={row}
+            revealDelayMs={
+              revealStepMs === undefined ? undefined : (rows.length - 1 - index) * revealStepMs
+            }
+          />
         ))}
       </ol>
     </div>
   )
 }
 
-function ResultRowView({ row }: { row: ResultRow }) {
+function ResultRowView({
+  row,
+  revealDelayMs,
+}: {
+  row: ResultRow
+  revealDelayMs: number | undefined
+}) {
   const tone = row.tone ?? 'normal'
   return (
     <li
@@ -62,6 +81,9 @@ function ResultRowView({ row }: { row: ResultRow }) {
         // than by a second highlight, so the two never compete.
         background: row.isMe === true ? 'var(--mdk-surface-sunken)' : 'transparent',
         opacity: tone === 'out' ? 0.6 : 1,
+        ...(revealDelayMs === undefined
+          ? {}
+          : { animation: `mdkRise .45s ease-out ${revealDelayMs}ms backwards` }),
       }}
     >
       <span className="w-5 flex-none text-right text-[13px] font-black text-[var(--mdk-ink-faint)]">

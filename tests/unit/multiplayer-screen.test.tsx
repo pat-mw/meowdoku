@@ -241,6 +241,18 @@ describe('the end of a match', () => {
     expect(rematch).toHaveBeenCalledTimes(1)
   })
 
+  it('lists every player on the leaderboard, last place revealed first', () => {
+    finishedMatch()
+    render(null)
+    const items = [...document.querySelectorAll('ol > li')]
+    expect(text()).toContain('Leaderboard')
+    expect(items).toHaveLength(2)
+    const delay = (li: Element): number =>
+      Number(/ (\d+)ms /.exec((li as HTMLElement).style.animation)?.[1])
+    // Rows are in finishing order; the leader's delay is the longest.
+    expect(delay(items[0]!)).toBeGreaterThan(delay(items[1]!))
+  })
+
   it('leaves the button off a podium the room cannot act on', () => {
     finishedMatch()
     useMultiplayerStore.setState({ status: 'reconnecting' })
